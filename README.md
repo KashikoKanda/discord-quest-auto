@@ -218,6 +218,19 @@ Every reply is private to the person who ran the command. Tokens live in
 `.quest-bot.json` (mode `600`, git-ignored) and are never echoed back; the bot never
 logs them either.
 
+### Token hygiene
+
+Discord scans messages, gists and public repositories and revokes any token it finds
+there. That is the usual reason a token stops working minutes after it was created.
+
+- Paste the token into the private `/link` form or `.env`, never into a chat message,
+  a screenshot, a commit or an issue.
+- Logs are scrubbed: anything that looks like a token becomes `<đã che>` before it is
+  written, and the startup line only shows an eight character fingerprint.
+- When Discord rejects a token, the bot writes `.quest-bot-dead`, exits with code 78 and
+  stops retrying; the watchdog waits instead of hammering the gateway. A new token
+  clears the marker and everything resumes.
+
 <a id="how-it-works"></a>
 
 ## How it works
