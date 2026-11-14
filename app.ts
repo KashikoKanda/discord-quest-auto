@@ -15,6 +15,8 @@ import { registerCommands, setBotToken, getMe } from './src/app/rest';
 import { startGateway, stopGateway } from './src/app/gateway';
 import { handleInteraction, commandDefs } from './src/app/commands';
 import { allAccounts, storePath } from './src/app/store';
+import { clearMarker, markTokenRejected, rejectedBefore } from './src/app/health';
+import { tokenFingerprint } from './src/core/redact';
 
 loadEnv();
 
@@ -30,8 +32,29 @@ if (!token) {
 
 async function main(): Promise<void> {
 	setBotToken(token);
-	const me = await getMe();
+
+	const rejected = rejectedBefore(token);
+	if (rejected) {
+		logger.error(
+			`Token (dấu vân ${rejected.fingerprint}) đã bị Discord từ chối lúc ${rejected.at}: ${rejected.reason}`,
+		);
+		logger.info('Tạo token mới ở Developer Portal → Bot → Reset Token rồi cập nhật DISCORD_BOT_TOKEN.');
+		process.exit(78);
+	}
+
+	let me;
+	try {
+		me = await getMe();
+	} catch (error) {
+		const message = (error as Error).message;
+		logger.error(message);
+		markTokenRejected(token, message);
+		logger.info('Kiểm tra token ở Developer Portal → Bot → Reset Token, sau đó cập nhật DISCORD_BOT_TOKEN.');
+		process.exit(78);
+	}
+	clearMarker();
 	logger.header('Discord Quest Bot', `@${me.username}`);
+	logger.info(`Token dấu vân ${tokenFingerprint(token)} · ${me.id}`);
 	logger.info(`Đăng ký slash command (${commandDefs.length} lệnh)...`);
 	await registerCommands(commandDefs as unknown[]);
 	logger.success('Slash command đã đăng ký.');

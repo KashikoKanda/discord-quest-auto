@@ -1,4 +1,6 @@
 /** REST thuần cho bot: danh tính, slash command, trả lời interaction. */
+import { redact } from '../core/redact';
+
 const API = 'https://discord.com/api/v10';
 
 export interface BotUser {
@@ -43,7 +45,7 @@ export async function registerCommands(commands: unknown[]): Promise<void> {
 	});
 	if (!res.ok) {
 		const text = await res.text().catch(() => '');
-		throw new Error(`Đăng ký slash command thất bại (HTTP ${res.status}): ${text.slice(0, 200)}`);
+		throw new Error(redact(`Đăng ký slash command thất bại (HTTP ${res.status}): ${text.slice(0, 200)}`));
 	}
 }
 
@@ -59,7 +61,7 @@ export async function replyInteraction(
 	});
 	if (!res.ok) {
 		const text = await res.text().catch(() => '');
-		throw new Error(`Trả lời interaction thất bại (HTTP ${res.status}): ${text.slice(0, 200)}`);
+		throw new Error(redact(`Trả lời interaction thất bại (HTTP ${res.status}): ${text.slice(0, 200)}`));
 	}
 }
 
@@ -85,7 +87,7 @@ export async function followUp(interactionToken: string, body: Record<string, un
 	});
 	if (!res.ok) {
 		const text = await res.text().catch(() => '');
-		throw new Error(`Gửi tin nhắn thất bại (HTTP ${res.status}): ${text.slice(0, 200)}`);
+		throw new Error(redact(`Gửi tin nhắn thất bại (HTTP ${res.status}): ${text.slice(0, 200)}`));
 	}
 }
 

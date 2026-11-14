@@ -1,3 +1,4 @@
+import { redact } from './redact';
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
@@ -48,7 +49,8 @@ const paint = {
 	bold: (text: string) => `${COLOR.bold}${text}${COLOR.reset}`,
 };
 
-export function log(level: Level, message: string): void {
+export function log(level: Level, raw: string): void {
+	const message = redact(raw);
 	const time = new Date().toTimeString().slice(0, 8);
 	process.stdout.write(`${paint.dim(time)} ${PAINT[level](ICON[level])} ${message}\n`);
 

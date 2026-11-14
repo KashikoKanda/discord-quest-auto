@@ -1,6 +1,7 @@
 import WebSocket from 'ws';
 import { logger } from '../core/logger';
 import type { GatewayInteraction } from './interface';
+import { markTokenRejected } from './health';
 
 const URL = 'wss://gateway.discord.gg/?v=10&encoding=json';
 const OP = { DISPATCH: 0, HEARTBEAT: 1, IDENTIFY: 2, RECONNECT: 7, INVALID: 9, HELLO: 10, ACK: 11 } as const;
@@ -152,8 +153,9 @@ function connect(): void {
 		if (session.closed) return;
 
 		if (code === 4004) {
-			logger.error('Bot token bị Discord từ chối (4004). Kiểm tra lại DISCORD_BOT_TOKEN.');
-			process.exit(1);
+			logger.error('Discord từ chối token bot (4004). Token đã bị thu hồi hoặc gõ sai.');
+			markTokenRejected(session.token, 'gateway close 4004 (unauthorized)');
+			process.exit(78);
 		}
 
 		session.reconnects += 1;
