@@ -195,17 +195,21 @@ async function handleDeferredCommand(interaction: GatewayInteraction, command: C
 		try {
 			const { quests } = await fetchDiscordQuests(account.token, account.tokenId);
 			const list = quests.map((item) => Quest.create(item));
-			const lines = list.slice(0, 18).map((quest) => {
+			// Chỉ hiện quest chưa làm và đang làm; quest đã xong thì ẩn đi.
+			const open = list.filter((quest) => quest.isOpen());
+			const waiting = list.filter((quest) => quest.isCompleted() && !quest.isClaimed()).length;
+			const lines = open.slice(0, 18).map((quest) => {
 				const orbs = quest.orbs ? ` · ${quest.orbs} orbs` : '';
-				return `${quest.isClaimed() ? '✔' : quest.isCompleted() ? '★' : '▸'} **${quest.name}**\n\u2003\`${quest.type}\` · ${quest.label()}${orbs}\n\u2003${bar(quest.progress)}`;
+				return `▸ **${quest.name}**\n\u2003\`${quest.type}\` · ${quest.label()}${orbs}\n\u2003${bar(quest.progress)}`;
 			});
-			const need = list.filter((quest) => !quest.isClaimed()).length;
+			const body = lines.join('\n') || 'Không còn quest nào để làm.';
+			const footer = waiting ? `\n\n✔ ${waiting} quest đã xong · nhận thưởng bằng \`/claim\`` : '';
 			await editOriginal(interaction.token, {
 				embeds: [
 					embed(
-						`Quest của ${account.username}`,
-						lines.join('\n') || 'Không có quest nào.',
-						need > 0 ? 0x5865f2 : 0x57f287,
+						`Quest của ${account.username} · ${open.length} cần làm`,
+						`${body}${footer}`,
+						open.length > 0 ? 0x5865f2 : 0x57f287,
 					),
 				],
 			});

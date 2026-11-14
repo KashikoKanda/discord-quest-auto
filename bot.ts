@@ -313,7 +313,7 @@ async function main(): Promise<void> {
 		}
 		const list = quests.map((q) => Quest.create(q));
 		logger.info(
-			`${list.length} quest · cần làm ${list.filter((q) => !q.isClaimed()).length} · chờ nhận ${list.filter((q) => q.isCompleted() && !q.isClaimed()).length}`,
+			`${list.filter((q) => q.isOpen()).length} quest cần làm · ${list.filter((q) => q.isCompleted() && !q.isClaimed()).length} chờ nhận`,
 		);
 		return;
 	}
@@ -329,7 +329,7 @@ async function main(): Promise<void> {
 		logger.header(`Quest của @${session.user.username}`, session.isVerified ? '' : 'chưa ở server bắt buộc');
 		const { quests } = await fetchDiscordQuests(session.token, session.tokenId);
 		const rows = (quests as QuestShape[]).map((q) => Quest.create(q));
-		const visible = has('all') ? rows : rows.filter((q) => !q.isClaimed());
+		const visible = has('all') ? rows : rows.filter((q) => q.isOpen());
 
 		if (has('json')) {
 			logger.plain(
@@ -354,7 +354,10 @@ async function main(): Promise<void> {
 				`  ${bar} ${String(Math.round(quest.progress)).padStart(3)}%  ${quest.label().padEnd(9)} ${quest.type.padEnd(22)} ${quest.name.slice(0, 42)}`,
 			);
 		}
-		if (visible.length === 0) logger.info('Không có quest nào cần làm.');
+		const waiting = rows.filter((q) => q.isCompleted() && !q.isClaimed()).length;
+		if (visible.length === 0) logger.info('Không còn quest nào để làm.');
+		else logger.info(`Còn ${visible.length} quest cần làm${waiting ? ` · ${waiting} quest chờ nhận thưởng` : ''}.`);
+		if (waiting) logger.info('Nhận thưởng: npm run claim');
 		return;
 	}
 

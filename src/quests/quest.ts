@@ -223,6 +223,11 @@ export class Quest {
 		return isQuestClaimed(this.data);
 	}
 
+	/** Còn việc để làm: chưa xong, chưa nhận thưởng, chưa hết hạn. */
+	isOpen(): boolean {
+		return !this.isCompleted() && !this.isClaimed() && !this.isExpired();
+	}
+
 	isEnrolled(): boolean {
 		return Boolean(this.userStatus?.enrolled_at);
 	}
