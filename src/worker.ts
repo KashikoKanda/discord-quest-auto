@@ -1,3 +1,4 @@
+import { existsSync, rmSync, writeFileSync } from 'node:fs';
 import { AUTO_INTERVAL_MS } from './core/constants';
 import { fetchDiscordQuests, enrollQuest, clearFingerprint, initBuildVersion } from './api/client';
 import { connectGateway, disconnectGateway } from './api/gateway';
@@ -7,6 +8,30 @@ import { isQuestCompleted, isQuestExpired } from './quests/quest';
 import { processQuest } from './quests';
 
 const AUTO_LOOP_INTERVAL_MS = AUTO_INTERVAL_MS;
+
+/**
+ * Dấu hiệu "đang có lượt chạy quest". Dùng để không ai dựng lại bot giữa chừng:
+ * process chết là lượt chạy mất, tiến trình trên Discord đứng im.
+ */
+const RUN_MARKER = process.env.QUEST_RUN_MARKER ?? '.quest-running';
+
+function markRunning(tokenId: string): void {
+	try {
+		writeFileSync(RUN_MARKER, JSON.stringify({ tokenId, pid: process.pid, since: new Date().toISOString() }), {
+			mode: 0o600,
+		});
+	} catch {
+		/* marker chỉ là tiện ích */
+	}
+}
+
+function unmarkRunning(): void {
+	try {
+		if (existsSync(RUN_MARKER)) rmSync(RUN_MARKER);
+	} catch {
+		/* bỏ qua */
+	}
+}
 const GAP_MS = 10_000;
 const GAP_JITTER_MS = 5_000;
 
@@ -15,6 +40,7 @@ async function processAllQuests(tokenId: string, multiQuest: boolean = false, ga
 	if (!state) return;
 
 	state.status = 'running';
+	markRunning(tokenId);
 	addLog(tokenId, 'info', 'Bắt đầu xử lý tất cả quest...');
 
 	try {
@@ -76,6 +102,8 @@ async function processAllQuests(tokenId: string, multiQuest: boolean = false, ga
 		const msg = err instanceof Error ? err.message : String(err);
 		state.status = 'error';
 		addLog(tokenId, 'error', `Lỗi: ${msg}`);
+	} finally {
+		unmarkRunning();
 	}
 }
 

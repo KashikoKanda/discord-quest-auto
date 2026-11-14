@@ -13,3 +13,4 @@ logs/
 .DS_Store
 .quest-bot.json
 .quest-bot-dead
+.quest-running
