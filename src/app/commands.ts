@@ -88,7 +88,8 @@ async function say(
 
 /** Bắt đầu một lần chạy và cập nhật tin nhắn theo log của engine. */
 async function streamRun(interaction: GatewayInteraction, tokenId: string, questId?: string): Promise<void> {
-	const started = QuestWorker.startQuests(tokenId, questId ?? undefined, false, 10000);
+	// Mặc định chạy song song: mọi quest cùng lúc. Có quest_id thì chỉ chạy quest đó.
+	const started = QuestWorker.startQuests(tokenId, questId ?? undefined, questId ? false : true, 10000);
 	if (!started.started) {
 		await editOriginal(interaction.token, {
 			embeds: [embed('Không chạy được', started.message, 0xfaa61a)],

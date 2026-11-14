@@ -35,7 +35,7 @@ Lệnh
 
 Tuỳ chọn
   --quest=<id>     chỉ làm một quest
-  --multi          chạy song song (mặc định tuần tự)
+  --single         chạy lần lượt từng quest (mặc định: tất cả cùng lúc)
   --force          bỏ qua kiểm tra server bắt buộc
   --json           (list) in JSON
   --log=<file>     ghi log ra file
@@ -401,12 +401,13 @@ async function main(): Promise<void> {
 	const { setLogFile } = await import('./src/core/logger');
 	setLogFile(logFile);
 
-	logger.header(`Quest run · @${session.user.username}`, has('multi') ? 'song song' : 'tuần tự');
+	logger.header(`Quest run · @${session.user.username}`, has('single') ? 'tuần tự' : 'song song');
 	if (!session.isVerified) logger.warn(`Chưa ở server bắt buộc: ${session.invite}`);
 
 	const gapFlag = flag('gap');
 	const gapMs = gapFlag ? Math.max(1, Number(gapFlag)) * 1000 : undefined;
-	const started = QuestWorker.startQuests(session.tokenId, flag('quest'), has('multi'), gapMs);
+	// Mặc định mọi quest chạy song song cùng lúc; --single chạy lần lượt.
+	const started = QuestWorker.startQuests(session.tokenId, flag('quest'), !has('single'), gapMs);
 	if (!started.started) throw new Error(started.message);
 
 	writeState({ pid: process.pid, mode: 'run', tokenId: session.tokenId, startedAt: Date.now(), logFile });
