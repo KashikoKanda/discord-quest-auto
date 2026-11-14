@@ -10,12 +10,7 @@ const AUTO_LOOP_INTERVAL_MS = AUTO_INTERVAL_MS;
 const GAP_MS = 10_000;
 const GAP_JITTER_MS = 5_000;
 
-async function processAllQuests(
-	tokenId: string,
-	skipAutoClaim: boolean = false,
-	multiQuest: boolean = false,
-	gapMs: number = GAP_MS,
-): Promise<void> {
+async function processAllQuests(tokenId: string, multiQuest: boolean = false, gapMs: number = GAP_MS): Promise<void> {
 	const state = getGlobalState().get(tokenId);
 	if (!state) return;
 
@@ -68,53 +63,7 @@ async function processAllQuests(
 			}
 		}
 
-		// Manual start path (skipAutoClaim=false) runs the optional post-completion
-		// reward claiming. The auto-quest loop passes skipAutoClaim=true.
-		if (!skipAutoClaim) {
-			const autoClaimEnabled = state.isVerified;
-			if (autoClaimEnabled) {
-				addLog(tokenId, 'info', 'Đang tự động nhận thưởng các quest đã hoàn thành...');
-				const { claimQuestReward } = await import('./api/client');
-				// Re-fetch quests to get latest status
-				try {
-					const { quests: latestQuests } = await fetchDiscordQuests(state.token, tokenId);
-					for (const q of latestQuests) {
-						const userStatus = q.user_status as Record<string, unknown> | undefined;
-						const isCompleted = userStatus?.completed_at != null;
-						const isClaimed = userStatus?.claimed_at != null;
-						if (isCompleted && !isClaimed) {
-							try {
-								const res = await claimQuestReward(
-									state.token,
-									q.id as string,
-									q as Record<string, unknown>,
-									tokenId,
-								);
-								if (res.ok) {
-									addLog(
-										tokenId,
-										'success',
-										`Đã tự động nhận thưởng quest ${((q.config as Record<string, unknown>)?.messages && ((q.config as Record<string, unknown>).messages as Record<string, string>)?.quest_name) || (q.id as string).slice(0, 8)}`,
-									);
-								} else {
-									addLog(
-										tokenId,
-										'warn',
-										`Tự nhận thưởng thất bại cho quest ${(q.id as string).slice(0, 8)}: ${res.status}`,
-									);
-								}
-							} catch {
-								// Ignore claim errors
-							}
-						}
-					}
-				} catch {
-					addLog(tokenId, 'warn', 'Không thể tải lại danh sách quest để tự nhận thưởng');
-				}
-			}
-		} else {
-			addLog(tokenId, 'info', 'Đã xử lý xong quest.');
-		}
+		addLog(tokenId, 'info', 'Đã xử lý xong quest.');
 
 		// Disconnect gateway after all quests done
 		disconnectGateway(tokenId);
@@ -170,8 +119,7 @@ async function runAutoQuestLoopTick(tokenId: string): Promise<void> {
 				addLog(tokenId, 'info', '[Auto-Quest] Không có quest nào cần làm, chờ tick tiếp theo.');
 			} else {
 				addLog(tokenId, 'info', `[Auto-Quest] Phát hiện ${doableQuests.length} quest chưa làm, đang xử lý...`);
-				// processAllQuests(tokenId, true) → skipAutoClaim=true: only completes quests.
-				await processAllQuests(tokenId, true).catch((err: unknown) => {
+				await processAllQuests(tokenId).catch((err: unknown) => {
 					const msg = err instanceof Error ? err.message : String(err);
 					addLog(tokenId, 'error', `[Auto-Quest] Lỗi xử lý: ${msg}`);
 				});
@@ -280,27 +228,6 @@ export const QuestWorker = {
 					state.status = 'running';
 					await processQuest(tokenId, quest);
 
-					// Auto-claim if verified and completed
-					if (state.isVerified) {
-						const userStatus = quest.user_status as Record<string, unknown> | undefined;
-						if (userStatus?.completed_at && !userStatus?.claimed_at) {
-							try {
-								const { claimQuestReward } = await import('./api/client');
-								const claimRes = await claimQuestReward(
-									state.token,
-									questId,
-									quest as Record<string, unknown>,
-									tokenId,
-								);
-								if (claimRes.ok) {
-									addLog(tokenId, 'success', `Đã tự động nhận thưởng quest ${questId}`);
-								}
-							} catch {
-								/* ignore */
-							}
-						}
-					}
-
 					disconnectGateway(tokenId);
 					if (state.status === 'running') state.status = 'idle';
 				} catch (err: unknown) {
@@ -312,7 +239,7 @@ export const QuestWorker = {
 		} else {
 			// multiQuest = true → parallel (tất cả cùng lúc — như ban đầu)
 			// multiQuest = false → sequential (từng quest cho đến khi hết — an toàn hơn)
-			processAllQuests(tokenId, false, multiQuest, gapMs);
+			processAllQuests(tokenId, multiQuest, gapMs);
 		}
 
 		return {

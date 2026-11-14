@@ -1,25 +1,26 @@
 name: Quests
 
-# Press Run workflow, paste the account token, pick what to do:
-#   mode=all     every quest that still needs work, one at a time
-#   mode=single  only the quest id you paste
+# Bấm Run workflow, dán token tài khoản, chọn việc cần làm:
+#   mode=all     làm mọi quest còn thiếu, lần lượt từng cái
+#   mode=single  chỉ làm đúng quest id đã dán
 #
-# Quests always run sequentially with a gap between them, and every API call is
-# spaced by the engine queue (1500-3000 ms), so a run never floods Discord.
+# Quest chạy tuần tự, giữa hai quest nghỉ ít nhất `gap` giây, và mỗi request vẫn
+# qua hàng đợi của engine nên không dội API Discord.
 #
-# The token is masked in the log before anything else runs and is never written
-# to disk. If you would rather not paste it each time, add a repository secret
-# named DISCORD_TOKEN and leave the prompt empty.
+# Workflow này KHÔNG tự nhận thưởng khi quest xong. Muốn nhận thưởng thì bật
+# claim_only, hoặc chạy `bot.ts claim` trên máy.
+#
+# Token được che (***) trước khi mọi thứ khác chạy và không ghi xuống đĩa.
 
 on:
   workflow_dispatch:
     inputs:
       token:
-        description: Discord account token (masked in the log)
+        description: Token tài khoản Discord (sẽ được che trong log)
         required: true
         type: string
       mode:
-        description: Which quests to run
+        description: Làm quest nào
         required: true
         type: choice
         default: all
@@ -27,16 +28,16 @@ on:
           - all
           - single
       quest_id:
-        description: Quest id (only used when mode=single)
+        description: Id quest (chỉ dùng khi mode=single)
         required: false
         type: string
       gap:
-        description: Minimum seconds to wait between two quests (jitter added on top)
+        description: Số giây nghỉ tối thiểu giữa hai quest
         required: false
         default: '10'
         type: string
       claim_only:
-        description: Only claim rewards for quests that already finished
+        description: Chỉ nhận thưởng cho quest đã xong, không làm quest
         required: false
         default: false
         type: boolean
@@ -50,27 +51,27 @@ concurrency:
 
 jobs:
   run:
-    name: Run quests
+    name: Chạy quest
     runs-on: ubuntu-latest
     timeout-minutes: 90
 
     steps:
-      - name: Checkout
+      - name: Lấy mã nguồn
         uses: actions/checkout@v4
 
-      - name: Node 20
+      - name: Cài Node 20
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
 
-      - name: Install dependencies
+      - name: Cài thư viện
         run: npm ci
 
-      # Fingerprint is one small JSON file. A fresh cache key each run keeps the
-      # entry immutable; restore-keys always finds the newest one, so the account
-      # keeps the same device identity between runs.
-      - name: Restore fingerprint
+      # Fingerprint là một file JSON nhỏ. Mỗi lần chạy một key mới để entry
+      # không bị ghi đè; restore-keys luôn tìm được bản mới nhất, nhờ vậy tài
+      # khoản giữ nguyên danh tính thiết bị giữa các lần chạy.
+      - name: Khôi phục fingerprint
         uses: actions/cache/restore@v4
         with:
           path: .quest-store.json
@@ -78,34 +79,35 @@ jobs:
           restore-keys: |
             quest-store-
 
-      - name: Mask token
+      - name: Che token
         env:
           TOKEN: ${{ inputs.token || secrets.DISCORD_TOKEN }}
         run: |
           if [ -z "$TOKEN" ]; then
-            echo "::error::No token. Paste one into the Run workflow prompt, or add a DISCORD_TOKEN secret."
+            echo "::error::Chưa có token. Dán token vào ô khi bấm Run workflow, hoặc thêm secret DISCORD_TOKEN."
             exit 1
           fi
           echo "::add-mask::$TOKEN"
 
-      - name: Check inputs
+      - name: Kiểm tra ô nhập
         run: |
           set -euo pipefail
           if [ "${{ inputs.mode }}" = "single" ] && [ -z "${{ inputs.quest_id }}" ]; then
-            echo "::error::mode=single needs quest_id. Run bot.ts list to see the ids."
+            echo "::error::mode=single cần quest_id. Chạy bot.ts list để xem id."
             exit 1
           fi
           case "${{ inputs.gap }}" in
-            ''|*[!0-9]*) echo "::error::gap must be a whole number of seconds."; exit 1 ;;
+            ''|*[!0-9]*) echo "::error::gap phải là số giây (số nguyên)."; exit 1 ;;
           esac
 
-      - name: Run
+      - name: Chạy
         env:
           TOKEN: ${{ inputs.token || secrets.DISCORD_TOKEN }}
         run: |
           set -euo pipefail
           mkdir -p logs
           if [ "${{ inputs.claim_only }}" = "true" ]; then
+            echo "chế độ nhận thưởng: bot.ts claim"
             npx tsx bot.ts claim 2>&1 | tee logs/quest.log
             exit 0
           fi
@@ -116,18 +118,18 @@ jobs:
           echo "chạy: bot.ts run $FLAGS"
           npx tsx bot.ts run --log=logs/quest.log $FLAGS 2>&1 | tee -a logs/quest.log
 
-      - name: Show log
+      - name: In log
         if: always()
-        run: cat logs/quest.log 2>/dev/null || echo "no log produced"
+        run: cat logs/quest.log 2>/dev/null || echo "không có log"
 
-      - name: Save fingerprint
+      - name: Lưu fingerprint
         if: always() && hashFiles('.quest-store.json') != ''
         uses: actions/cache/save@v4
         with:
           path: .quest-store.json
           key: quest-store-${{ github.run_id }}
 
-      - name: Upload log
+      - name: Tải log lên
         if: always()
         uses: actions/upload-artifact@v4
         with:

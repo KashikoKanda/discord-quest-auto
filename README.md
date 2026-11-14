@@ -38,13 +38,20 @@ Workflow sẽ checkout code, cài dependency, chạy `bot.ts run`, giữ `.quest
 trong cache để tài khoản luôn mang một danh tính thiết bị duy nhất, và tải log lên
 làm artifact. Token được che (`***`) trước khi bot khởi động và không ghi xuống đĩa.
 
-Các ô khi bấm Run tương ứng với CLI:
+Các ô khi bấm Run:
 
-| Ô nhập       | Tương đương    |
-| :----------- | :------------- |
-| `quest`      | `--quest=<id>` |
-| `multi`      | `--multi`      |
-| `claim_only` | `bot.ts claim` |
+| Ô nhập       | Chọn gì                                                   | Tương đương    |
+| :----------- | :-------------------------------------------------------- | :------------- |
+| `mode`       | `all` làm mọi quest còn thiếu, `single` chỉ làm một quest | `--quest=<id>` |
+| `quest_id`   | id quest, bắt buộc khi `mode=single`                      | `--quest=<id>` |
+| `gap`        | số giây nghỉ tối thiểu giữa hai quest, mặc định 10        | `--gap=<giây>` |
+| `claim_only` | chỉ nhận thưởng, không làm quest                          | `bot.ts claim` |
+
+Workflow **không tự nhận thưởng** khi quest xong: quest hoàn thành là dừng. Muốn lấy
+thưởng thì bật `claim_only`, hoặc chạy `npm run claim` trên máy.
+
+Quest luôn chạy **lần lượt**, mỗi quest cách nhau ít nhất `gap` giây (cộng thêm 0–5 giây
+ngẫu nhiên), và từng request vẫn qua hàng đợi của engine nên không spam Discord.
 
 Muốn khỏi dán token mỗi lần: tạo secret `DISCORD_TOKEN` trong **Settings → Secrets and
 variables → Actions**, rồi sửa `required: true` thành `false` cho ô `token`. Khi ô trống,
@@ -57,7 +64,7 @@ workflow tự dùng secret.
 ```bash
 npm install
 cp .env.example .env      # dán token vào TOKEN=
-npm start                 # làm hết quest, nhận thưởng, thoát
+npm start                 # làm hết quest rồi thoát
 ```
 
 Cần Node 20 trở lên.
@@ -66,14 +73,14 @@ Cần Node 20 trở lên.
 
 ## Lệnh
 
-| Lệnh                              | Việc nó làm                             |
-| :-------------------------------- | :-------------------------------------- |
-| `npm start`                       | Làm mọi quest đang có, rồi nhận thưởng  |
-| `npm run list`                    | Xem danh sách quest kèm tiến trình      |
-| `npm run claim`                   | Chỉ nhận thưởng cho quest đã xong       |
-| `npm run auto`                    | Chạy nền, 5 phút quét quest mới một lần |
-| `npm run status`                  | Tiến trình nền đang làm gì              |
-| `tsx --env-file=.env bot.ts stop` | Dừng `run` hoặc `auto` đang chạy        |
+| Lệnh                              | Việc nó làm                               |
+| :-------------------------------- | :---------------------------------------- |
+| `npm start`                       | Làm mọi quest đang có (không nhận thưởng) |
+| `npm run list`                    | Xem danh sách quest kèm tiến trình        |
+| `npm run claim`                   | Chỉ nhận thưởng cho quest đã xong         |
+| `npm run auto`                    | Chạy nền, 5 phút quét quest mới một lần   |
+| `npm run status`                  | Tiến trình nền đang làm gì                |
+| `tsx --env-file=.env bot.ts stop` | Dừng `run` hoặc `auto` đang chạy          |
 
 <a id="co"></a>
 
@@ -84,7 +91,6 @@ Cần Node 20 trở lên.
 ```bash
 tsx --env-file=.env bot.ts run --quest=<id>    # một quest duy nhất
 tsx --env-file=.env bot.ts run --multi         # chạy song song thay vì lần lượt
-tsx --env-file=.env bot.ts run --no-claim      # không nhận thưởng
 tsx --env-file=.env bot.ts run --log=run.log   # đổi file log (mặc định logs/quest-<ngày>.log)
 tsx --env-file=.env bot.ts run --gap=20        # nghỉ tối thiểu 20s giữa hai quest
 tsx --env-file=.env bot.ts list --all          # gồm cả quest đã nhận thưởng
@@ -152,8 +158,9 @@ bot.ts              worker.ts            api/client.ts             Discord
 đọc .env     ──▶    mở gateway      ──▶  POST /quests/@me/enroll
                     GET /quests/@me
                     quests/index.ts   ──▶  video-progress · heartbeat · discordsays
-                    poll user_status
-                    nhận thưởng       ──▶  POST /quests/@me/{id}/claim
+                    poll user_status  (dừng ở đây)
+
+bot.ts claim        claimCompleted    ──▶  POST /quests/@me/{id}/claim
 ```
 
 <a id="loai-quest"></a>

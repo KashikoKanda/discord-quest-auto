@@ -31,7 +31,6 @@ Lệnh
 Tuỳ chọn
   --quest=<id>     chỉ làm một quest
   --multi          chạy song song (mặc định tuần tự)
-  --no-claim       không tự nhận thưởng
   --force          bỏ qua kiểm tra server bắt buộc
   --json           (list) in JSON
   --log=<file>     ghi log ra file
@@ -281,9 +280,8 @@ async function main(): Promise<void> {
 		if (QuestWorker.getStatus(session.tokenId) === 'error') {
 			throw new Error('Quest dừng vì lỗi, xem log phía trên.');
 		}
-		if (!has('no-claim') && session.isVerified) {
-			const claimed = await claimCompleted(session.token, session.tokenId);
-			if (claimed === 0) logger.info('Không có quest nào chờ nhận thưởng.');
+		if (session.isVerified) {
+			logger.info('Quest đã xong. Muốn nhận thưởng thì chạy: bot.ts claim');
 		}
 		logger.blank();
 		logger.success('Xong.');
