@@ -7,11 +7,14 @@ import { isQuestCompleted, isQuestExpired } from './quests/quest';
 import { processQuest } from './quests';
 
 const AUTO_LOOP_INTERVAL_MS = AUTO_INTERVAL_MS;
+const GAP_MS = 10_000;
+const GAP_JITTER_MS = 5_000;
 
 async function processAllQuests(
 	tokenId: string,
 	skipAutoClaim: boolean = false,
 	multiQuest: boolean = false,
+	gapMs: number = GAP_MS,
 ): Promise<void> {
 	const state = getGlobalState().get(tokenId);
 	if (!state) return;
@@ -57,9 +60,8 @@ async function processAllQuests(
 				const questName = ((quest as Record<string, unknown>)?.name as string) || `quest ${i + 1}`;
 				addLog(tokenId, 'info', `[${i + 1}/${doableQuests.length}] Đang làm quest: ${questName}`);
 				await processQuest(tokenId, quest);
-				// Random delay 8-15s giữa mỗi quest (trừ quest cuối)
 				if (i < doableQuests.length - 1) {
-					const delay = Math.floor(Math.random() * 7000) + 8000; // 8000-15000ms
+					const delay = Math.floor(Math.random() * GAP_JITTER_MS) + gapMs;
 					addLog(tokenId, 'info', `Nghỉ ${(delay / 1000).toFixed(1)}s trước khi làm quest tiếp theo...`);
 					await new Promise((resolve) => setTimeout(resolve, delay));
 				}
@@ -238,7 +240,12 @@ export const QuestWorker = {
 		getGlobalState().delete(tokenId);
 	},
 
-	startQuests(tokenId: string, questId?: string, multiQuest: boolean = false): { started: boolean; message: string } {
+	startQuests(
+		tokenId: string,
+		questId?: string,
+		multiQuest: boolean = false,
+		gapMs: number = GAP_MS,
+	): { started: boolean; message: string } {
 		const state = getGlobalState().get(tokenId);
 		if (!state) {
 			return { started: false, message: 'Token chưa đăng ký' };
@@ -305,7 +312,7 @@ export const QuestWorker = {
 		} else {
 			// multiQuest = true → parallel (tất cả cùng lúc — như ban đầu)
 			// multiQuest = false → sequential (từng quest cho đến khi hết — an toàn hơn)
-			processAllQuests(tokenId, false, multiQuest);
+			processAllQuests(tokenId, false, multiQuest, gapMs);
 		}
 
 		return {

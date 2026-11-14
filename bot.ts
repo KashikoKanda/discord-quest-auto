@@ -35,6 +35,7 @@ Tuỳ chọn
   --force          bỏ qua kiểm tra server bắt buộc
   --json           (list) in JSON
   --log=<file>     ghi log ra file
+  --gap=<giây>     nghỉ tối thiểu giữa hai quest (mặc định 10)
   --token=<token>  dùng token khác trong .env`;
 
 /** In log của engine ra terminal cho tới khi hàng đợi rảnh. */
@@ -260,7 +261,9 @@ async function main(): Promise<void> {
 	logger.header(`Quest run · @${session.user.username}`, has('multi') ? 'song song' : 'tuần tự');
 	if (!session.isVerified) logger.warn(`Chưa ở server bắt buộc: ${session.invite}`);
 
-	const started = QuestWorker.startQuests(session.tokenId, flag('quest'), has('multi'));
+	const gapFlag = flag('gap');
+	const gapMs = gapFlag ? Math.max(1, Number(gapFlag)) * 1000 : undefined;
+	const started = QuestWorker.startQuests(session.tokenId, flag('quest'), has('multi'), gapMs);
 	if (!started.started) throw new Error(started.message);
 
 	writeState({ pid: process.pid, mode: 'run', tokenId: session.tokenId, startedAt: Date.now(), logFile });

@@ -1,11 +1,15 @@
 name: Quests
 
-# Press Run workflow and paste the account token into the prompt. Nothing else
-# is needed: no secret, no .env, no local install.
+# Press Run workflow, paste the account token, pick what to do:
+#   mode=all     every quest that still needs work, one at a time
+#   mode=single  only the quest id you paste
 #
-# The token is masked in the log before anything else runs, and it is never
-# written to disk. If you would rather not paste it each time, add a repository
-# secret named DISCORD_TOKEN and leave the prompt empty.
+# Quests always run sequentially with a gap between them, and every API call is
+# spaced by the engine queue (1500-3000 ms), so a run never floods Discord.
+#
+# The token is masked in the log before anything else runs and is never written
+# to disk. If you would rather not paste it each time, add a repository secret
+# named DISCORD_TOKEN and leave the prompt empty.
 
 on:
   workflow_dispatch:
@@ -14,15 +18,23 @@ on:
         description: Discord account token (masked in the log)
         required: true
         type: string
-      quest:
-        description: Quest id to run (leave empty for every quest)
+      mode:
+        description: Which quests to run
+        required: true
+        type: choice
+        default: all
+        options:
+          - all
+          - single
+      quest_id:
+        description: Quest id (only used when mode=single)
         required: false
         type: string
-      multi:
-        description: Run quests in parallel instead of one by one
+      gap:
+        description: Minimum seconds to wait between two quests (jitter added on top)
         required: false
-        default: false
-        type: boolean
+        default: '10'
+        type: string
       claim_only:
         description: Only claim rewards for quests that already finished
         required: false
@@ -76,6 +88,17 @@ jobs:
           fi
           echo "::add-mask::$TOKEN"
 
+      - name: Check inputs
+        run: |
+          set -euo pipefail
+          if [ "${{ inputs.mode }}" = "single" ] && [ -z "${{ inputs.quest_id }}" ]; then
+            echo "::error::mode=single needs quest_id. Run bot.ts list to see the ids."
+            exit 1
+          fi
+          case "${{ inputs.gap }}" in
+            ''|*[!0-9]*) echo "::error::gap must be a whole number of seconds."; exit 1 ;;
+          esac
+
       - name: Run
         env:
           TOKEN: ${{ inputs.token || secrets.DISCORD_TOKEN }}
@@ -86,9 +109,11 @@ jobs:
             npx tsx bot.ts claim 2>&1 | tee logs/quest.log
             exit 0
           fi
-          FLAGS=""
-          if [ -n "${{ inputs.quest }}" ]; then FLAGS="$FLAGS --quest=${{ inputs.quest }}"; fi
-          if [ "${{ inputs.multi }}" = "true" ]; then FLAGS="$FLAGS --multi"; fi
+          FLAGS="--gap=${{ inputs.gap }}"
+          if [ "${{ inputs.mode }}" = "single" ]; then
+            FLAGS="$FLAGS --quest=${{ inputs.quest_id }}"
+          fi
+          echo "chạy: bot.ts run $FLAGS"
           npx tsx bot.ts run --log=logs/quest.log $FLAGS 2>&1 | tee -a logs/quest.log
 
       - name: Show log

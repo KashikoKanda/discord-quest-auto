@@ -86,6 +86,7 @@ tsx --env-file=.env bot.ts run --quest=<id>    # một quest duy nhất
 tsx --env-file=.env bot.ts run --multi         # chạy song song thay vì lần lượt
 tsx --env-file=.env bot.ts run --no-claim      # không nhận thưởng
 tsx --env-file=.env bot.ts run --log=run.log   # đổi file log (mặc định logs/quest-<ngày>.log)
+tsx --env-file=.env bot.ts run --gap=20        # nghỉ tối thiểu 20s giữa hai quest
 tsx --env-file=.env bot.ts list --all          # gồm cả quest đã nhận thưởng
 tsx --env-file=.env bot.ts list --json         # dạng JSON
 tsx --env-file=.env bot.ts auto --force        # bỏ qua kiểm tra server bắt buộc
