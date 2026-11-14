@@ -432,6 +432,60 @@ export const QuestWorker = {
 		}
 	},
 
+	/** Quest có trong danh mục công khai nhưng tài khoản này không thấy. */
+	async hiddenQuests(tokenId: string, country: string = 'VN') {
+		const state = getGlobalState().get(tokenId);
+		if (!state) return [];
+
+		const { fetchDiscordQuests } = await import('./api/client');
+		const { fetchHiddenQuests } = await import('./api/catalog');
+		const { quests } = await fetchDiscordQuests(state.token, tokenId);
+		const owned = new Set(quests.map((quest) => String((quest as Record<string, unknown>).id)));
+		return fetchHiddenQuests(owned, country);
+	},
+
+	/** Nhận một quest ẩn bằng id để đưa nó vào danh sách làm được. */
+	async enrollHidden(tokenId: string, questId: string): Promise<{ success: boolean; message: string }> {
+		const state = getGlobalState().get(tokenId);
+		if (!state) return { success: false, message: 'Token chưa đăng ký' };
+
+		const { enrollQuest } = await import('./api/client');
+		const { fetchCatalog } = await import('./api/catalog');
+		const catalog = await fetchCatalog().catch(() => []);
+		const quest = catalog.find((item) => item.id === questId);
+
+		const res = await enrollQuest(state.token, questId, false, tokenId, quest?.raw);
+		const body = await res.text().catch(() => '');
+
+		if (res.ok || res.status === 204) {
+			addLog(tokenId, 'success', `Đã nhận quest ẩn ${quest?.name ?? questId}`);
+			return { success: true, message: `Đã nhận ${quest?.name ?? questId}` };
+		}
+
+		// Mã lỗi Discord khi nhận quest, dịch sang câu dễ hiểu.
+		let code = 0;
+		try {
+			code = Number((JSON.parse(body) as Record<string, unknown>).code ?? 0);
+		} catch {
+			/* body không phải JSON */
+		}
+		const map: Record<number, string> = {
+			260008: 'Quest không tồn tại hoặc tài khoản không đủ điều kiện',
+			40001: 'Token không hợp lệ hoặc đã hết hạn',
+			50001: 'Tài khoản không có quyền nhận quest này',
+			50000: 'Tài khoản bị chặn nhận quest',
+		};
+		const message =
+			map[code] ??
+			(res.status === 403
+				? 'Quest không khả dụng ở vùng của tài khoản'
+				: res.status === 429
+					? 'Discord giới hạn tần suất, thử lại sau'
+					: `${res.status} ${body.slice(0, 120)}`);
+		addLog(tokenId, 'warn', `Nhận quest ẩn ${questId} thất bại: ${message}`);
+		return { success: false, message };
+	},
+
 	/** Nhận thưởng cho mọi quest đã xong mà chưa nhận, lần lượt từng cái. */
 	async claimAll(tokenId: string): Promise<{
 		total: number;

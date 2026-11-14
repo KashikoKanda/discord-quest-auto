@@ -156,6 +156,7 @@ Want to skip the prompt? Add a repository secret named `DISCORD_TOKEN`.
 | :-------------------- | :--------------------------------------------------- |
 | `npm start`           | Run every available quest, then exit                 |
 | `npm run list`        | List quests with progress                            |
+| `npm run hidden`      | Show hidden quests and enrol one by id               |
 | `npm run claim`       | Claim rewards for quests that already finished       |
 | `npm run auto`        | Run as a background loop, rescanning every 5 minutes |
 | `npm run status`      | Show the background loop and live Discord progress   |
@@ -168,6 +169,9 @@ npx tsx bot.ts run --quest=<id>     # a single quest
 npx tsx bot.ts run --multi          # every quest at once instead of one by one
 npx tsx bot.ts run --gap=20         # at least 20 s between two quests
 npx tsx bot.ts run --log=run.log    # custom log file (default logs/quest-<date>.log)
+npx tsx bot.ts hidden               # quests in the public catalogue your account cannot see
+npx tsx bot.ts hidden --enroll=<id> # enrol one of them so it enters the normal run
+npx tsx bot.ts hidden --country=VN  # compare against another region (default VN)
 npx tsx bot.ts list --all           # include claimed quests
 npx tsx bot.ts list --json          # machine readable
 npx tsx bot.ts auto --force         # skip the required-server check
@@ -202,17 +206,18 @@ npm run bot
 On first start the bot publishes its commands globally and prints its own tag when the
 gateway is ready.
 
-| Command        | What it does                                        |
-| :------------- | :-------------------------------------------------- |
-| `/link`        | Opens a private form; paste the account token there |
-| `/quests`      | Quest list with type, state and progress bars       |
-| `/run [quest]` | Complete quests, progress streams into the reply    |
-| `/stop`        | Stop the current run                                |
-| `/claim`       | Claim rewards for finished quests                   |
-| `/status`      | Engine state, progress and the latest log lines     |
-| `/auto`        | Scan every 30 minutes on its own                    |
-| `/unlink`      | Forget the linked account                           |
-| `/help`        | Command overview                                    |
+| Command        | What it does                                                        |
+| :------------- | :------------------------------------------------------------------ |
+| `/link`        | Opens a private form; paste the account token there                 |
+| `/quests`      | Quest list with type, state and progress bars                       |
+| `/hidden`      | Hidden quests from the public catalogue, with `/hidden enroll:<id>` |
+| `/run [quest]` | Complete quests, progress streams into the reply                    |
+| `/stop`        | Stop the current run                                                |
+| `/claim`       | Claim rewards for finished quests                                   |
+| `/status`      | Engine state, progress and the latest log lines                     |
+| `/auto`        | Scan every 30 minutes on its own                                    |
+| `/unlink`      | Forget the linked account                                           |
+| `/help`        | Command overview                                                    |
 
 Every reply is private to the person who ran the command. Tokens live in
 `.quest-bot.json` (mode `600`, git-ignored) and are never echoed back; the bot never

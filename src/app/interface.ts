@@ -1,4 +1,5 @@
-export type CommandName = 'help' | 'link' | 'unlink' | 'quests' | 'run' | 'stop' | 'claim' | 'status' | 'auto';
+export type CommandName =
+	'help' | 'link' | 'unlink' | 'quests' | 'hidden' | 'run' | 'stop' | 'claim' | 'status' | 'auto';
 
 export interface CommandOption {
 	name: string;

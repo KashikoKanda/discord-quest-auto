@@ -28,6 +28,7 @@ có lưu vào .env hay không.
 Lệnh
   run       làm toàn bộ quest đang có rồi tự nhận thưởng   (mặc định)
   list      liệt kê quest kèm tiến trình
+  hidden    xem quest ẩn (có trong danh mục nhưng tài khoản không thấy)
   claim     nhận thưởng cho quest đã hoàn thành
   auto      chạy nền, quét lại mỗi 5 phút
   status    trạng thái tiến trình + tiến trình thật từ Discord
@@ -37,7 +38,9 @@ Tuỳ chọn
   --quest=<id>     chỉ làm một quest
   --single         chạy lần lượt từng quest (mặc định: tất cả cùng lúc)
   --force          bỏ qua kiểm tra server bắt buộc
-  --json           (list) in JSON
+  --json           (list/hidden) in JSON
+  --enroll=<id>    (hidden) nhận một quest ẩn để đưa vào lượt chạy
+  --country=<cc>   (hidden) mã quốc gia để đối chiếu vùng (mặc định VN)
   --log=<file>     ghi log ra file
   --gap=<giây>     nghỉ tối thiểu giữa hai quest (mặc định 10)
   --no-color       tắt màu (hoặc đặt NO_COLOR=1)
@@ -255,7 +258,7 @@ async function claimCompleted(token: string, tokenId: string): Promise<number> {
 }
 
 async function main(): Promise<void> {
-	const known = ['run', 'list', 'claim', 'auto', 'status', 'stop', 'help'];
+	const known = ['run', 'list', 'hidden', 'claim', 'auto', 'status', 'stop', 'help'];
 	if (!known.includes(command)) {
 		logger.error(`Không có lệnh "${command}".`);
 		logger.blank();
@@ -358,6 +361,40 @@ async function main(): Promise<void> {
 		if (visible.length === 0) logger.info('Không còn quest nào để làm.');
 		else logger.info(`Còn ${visible.length} quest cần làm${waiting ? ` · ${waiting} quest chờ nhận thưởng` : ''}.`);
 		if (waiting) logger.info('Nhận thưởng: npm run claim');
+		return;
+	}
+
+	if (command === 'hidden') {
+		const country = (flag('country') ?? 'VN').toUpperCase();
+		const enrollId = flag('enroll');
+
+		if (enrollId) {
+			const result = await QuestWorker.enrollHidden(session.tokenId, enrollId);
+			logger.plain(`${result.success ? '✔' : '✖'} ${result.message}`);
+			if (!result.success) process.exitCode = 1;
+			return;
+		}
+
+		const list = await QuestWorker.hiddenQuests(session.tokenId, country);
+		if (has('json')) {
+			logger.plain(JSON.stringify(list, null, 2));
+			return;
+		}
+
+		logger.header('Quest ẩn', `${list.length} quest · vùng ${country}`);
+		if (list.length === 0) {
+			logger.info('Không có quest ẩn nào.');
+			return;
+		}
+		for (const quest of list.slice(0, 30)) {
+			const mark = quest.enrollable ? '✔' : '·';
+			logger.plain(
+				`  ${mark} ${quest.id}  ${String(quest.minutes).padStart(3)}m  ${quest.type.padEnd(22)} ${quest.name.slice(0, 38)}  (${quest.reason})`,
+			);
+		}
+		if (list.length > 30) logger.info(`… và ${list.length - 30} quest khác.`);
+		const ready = list.filter((quest) => quest.enrollable).length;
+		logger.info(`Nhận được ${ready}/${list.length} quest. Nhận một quest: npm start hidden --enroll=<id>`);
 		return;
 	}
 

@@ -30,6 +30,19 @@ export const commandDefs = [
 		],
 	},
 	{ name: 'stop', description: 'Dừng quest đang chạy', type: 1 },
+	{
+		name: 'hidden',
+		description: 'Xem quest ẩn (danh mục công khai) và nhận quest',
+		type: 1,
+		options: [
+			{
+				name: 'enroll',
+				description: 'ID quest cần nhận',
+				type: 3,
+				required: false,
+			},
+		],
+	},
 	{ name: 'claim', description: 'Nhận thưởng cho quest đã xong', type: 1 },
 	{ name: 'status', description: 'Trạng thái và log gần nhất', type: 1 },
 	{
@@ -254,6 +267,59 @@ async function handleDeferredCommand(interaction: GatewayInteraction, command: C
 				),
 			],
 		});
+		return;
+	}
+
+	if (command === 'hidden') {
+		const enrollId = option(interaction, 'enroll');
+		if (enrollId) {
+			const result = await QuestWorker.enrollHidden(account.tokenId, enrollId.trim());
+			await editOriginal(interaction.token, {
+				embeds: [
+					embed(
+						result.success ? 'Đã nhận quest ẩn' : 'Không nhận được',
+						result.message,
+						result.success ? 0x57f287 : 0xfaa61a,
+					),
+				],
+			});
+			return;
+		}
+
+		try {
+			const list = await QuestWorker.hiddenQuests(account.tokenId, 'VN');
+			if (list.length === 0) {
+				await editOriginal(interaction.token, {
+					embeds: [
+						embed('Quest ẩn', 'Danh mục công khai không có quest nào ngoài danh sách của bạn.', 0x57f287),
+					],
+				});
+				return;
+			}
+			const ready = list.filter((quest) => quest.enrollable);
+			const lines = list.slice(0, 14).map((quest) => {
+				const mark = quest.enrollable ? '✔' : '·';
+				return `${mark} **${quest.name}**\n\u2003\`${quest.type}\` · ${quest.minutes}m · ${quest.reason}\n\u2003\`${quest.id}\``;
+			});
+			const more = list.length > 14 ? `\n… và ${list.length - 14} quest khác` : '';
+			const hint = ready.length
+				? `\n\nNhận quest: \`/hidden enroll:<id>\``
+				: '\n\nHiện không có quest ẩn nào nhận được từ vùng VN.';
+			await editOriginal(interaction.token, {
+				embeds: [
+					embed(
+						`Quest ẩn · ${list.length} quest · nhận được ${ready.length}`,
+						`${lines.join('\n')}${more}${hint}`,
+						0x5865f2,
+					),
+				],
+			});
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			await editOriginal(interaction.token, {
+				embeds: [embed('Không tải được danh mục', message.slice(0, 300), 0xed4245)],
+			});
+		}
 		return;
 	}
 
