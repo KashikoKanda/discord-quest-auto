@@ -11,7 +11,7 @@ Video · Play · Activity · Achievement — no browser, no database, no proxy.
 [![Platform](https://img.shields.io/badge/platform-linux%20%7C%20macos%20%7C%20windows%20%7C%20termux-6f42c1)](#platforms)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-[Quick start](#quick-start) · [Platforms](#platforms) · [Commands](#commands) · [How it works](#how-it-works) · [Troubleshooting](#troubleshooting)
+[Quick start](#quick-start) · [Platforms](#platforms) · [Commands](#commands) · [Bot](#discord-bot) · [How it works](#how-it-works) · [Troubleshooting](#troubleshooting)
 
 </div>
 
@@ -185,6 +185,38 @@ npx tsx bot.ts run --no-color       # plain output for logs
 | `NO_COLOR`    | unset               | Any value disables ANSI colours            |
 
 Both JSON files are created on first run and are git-ignored.
+
+<a id="discord-bot"></a>
+
+## Discord bot
+
+A small bot can hold the same engine behind slash commands, so an account can be run
+from a phone without a terminal.
+
+```bash
+# put the bot token in .env
+DISCORD_BOT_TOKEN=your_bot_token
+npm run bot
+```
+
+On first start the bot publishes its commands globally and prints its own tag when the
+gateway is ready.
+
+| Command        | What it does                                        |
+| :------------- | :-------------------------------------------------- |
+| `/link`        | Opens a private form; paste the account token there |
+| `/quests`      | Quest list with type, state and progress bars       |
+| `/run [quest]` | Complete quests, progress streams into the reply    |
+| `/stop`        | Stop the current run                                |
+| `/claim`       | Claim rewards for finished quests                   |
+| `/status`      | Engine state, progress and the latest log lines     |
+| `/auto`        | Scan every 30 minutes on its own                    |
+| `/unlink`      | Forget the linked account                           |
+| `/help`        | Command overview                                    |
+
+Every reply is private to the person who ran the command. Tokens live in
+`.quest-bot.json` (mode `600`, git-ignored) and are never echoed back; the bot never
+logs them either.
 
 <a id="how-it-works"></a>
 

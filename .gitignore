@@ -11,3 +11,4 @@ logs/
 .quest-store.json.tmp
 
 .DS_Store
+.quest-bot.json
