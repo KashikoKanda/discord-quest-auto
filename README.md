@@ -2,227 +2,274 @@
 
 # Discord Quest Auto
 
-Làm quest Discord ngay trên terminal: **video · play · activity · achievement**.
-Không trình duyệt, không database, không proxy. Một token, một fingerprint, một hàng đợi.
+**Finish Discord quests from your terminal.**
+Video · Play · Activity · Achievement — no browser, no database, no proxy.
 
 [![CI](https://github.com/KashikoKanda/discord-quest-auto/actions/workflows/ci.yml/badge.svg)](https://github.com/KashikoKanda/discord-quest-auto/actions/workflows/ci.yml)
 [![Quests](https://github.com/KashikoKanda/discord-quest-auto/actions/workflows/quests.yml/badge.svg)](https://github.com/KashikoKanda/discord-quest-auto/actions/workflows/quests.yml)
 [![Node](https://img.shields.io/badge/node-%E2%89%A520-informational)](https://nodejs.org)
+[![Platform](https://img.shields.io/badge/platform-linux%20%7C%20macos%20%7C%20windows%20%7C%20termux-6f42c1)](#platforms)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
+[Quick start](#quick-start) · [Platforms](#platforms) · [Commands](#commands) · [How it works](#how-it-works) · [Troubleshooting](#troubleshooting)
 
 </div>
 
-<a id="dieu-huong"></a>
-
-## Điều hướng nhanh
-
-| Bắt đầu                                | Dùng hằng ngày                                            | Hiểu bên trong                                          |
-| :------------------------------------- | :-------------------------------------------------------- | :------------------------------------------------------ |
-| [Chạy trên GitHub](#chay-tren-github)  | [Lệnh](#lenh) · [Cờ](#co)                                 | [Cấu trúc dự án](#cau-truc)                             |
-| [Chạy trên máy](#chay-tren-may)        | [Cấu hình](#cau-hinh) · [Lỗi thường gặp](#loi-thuong-gap) | [Một lượt chạy](#luot-chay) · [Loại quest](#loai-quest) |
-| [Cài trong 30 giây](#chay-tren-github) | [Nhận thưởng](#lenh)                                      | [Ba nguyên tắc an toàn](#ba-nguyen-tac)                 |
-
 ---
 
-<a id="chay-tren-github"></a>
+## Why this exists
 
-## Chạy trên GitHub
+Discord hands out Orbs for watching a video, playing a game, or sitting inside an
+activity. The official client does all of that quietly in the background. This tool
+does the same thing, except it prints what it is doing in a terminal window and takes
+one account token to start.
 
-Không cần cài gì, không cần tạo secret.
+- **One process, one token.** No Docker, no database, no browser automation.
+- **Real pacing.** Every request goes through a per-token queue: 1.5–3 s apart, `429`
+  respected, `5xx` backed off exponentially, one quest at a time by default.
+- **Stable identity.** User agent, locale, timezone, launch id and session id are
+  generated once per token and reused, so Discord keeps seeing the same device.
+- **Works where you are.** Linux, macOS, Windows `cmd`/PowerShell, Android Termux,
+  or GitHub Actions if you would rather not keep a machine awake.
 
-1. **Fork** repo này (hoặc dùng trực tiếp).
-2. Mở **Actions → Quests → Run workflow**.
-3. Dán token tài khoản vào ô `token` rồi bấm **Run workflow**.
+<a id="quick-start"></a>
 
-Workflow sẽ checkout code, cài dependency, chạy `bot.ts run`, giữ `.quest-store.json`
-trong cache để tài khoản luôn mang một danh tính thiết bị duy nhất, và tải log lên
-làm artifact. Token được che (`***`) trước khi bot khởi động và không ghi xuống đĩa.
-
-Các ô khi bấm Run:
-
-| Ô nhập     | Chọn gì                                                     | Tương đương    |
-| :--------- | :---------------------------------------------------------- | :------------- |
-| `multi`    | **bật** làm mọi quest còn thiếu, **tắt** chỉ làm `quest_id` | `--quest=<id>` |
-| `quest_id` | id quest, bắt buộc khi công tắc `multi` tắt                 | `--quest=<id>` |
-| `gap`      | số giây nghỉ tối thiểu giữa hai quest, mặc định 10          | `--gap=<giây>` |
-
-Workflow **chỉ làm quest, không nhận thưởng**. Quest xong là dừng; muốn lấy thưởng
-thì chạy `npm run claim` trên máy.
-
-Quest luôn chạy **lần lượt**, mỗi quest cách nhau ít nhất `gap` giây (cộng thêm 0–5 giây
-ngẫu nhiên), và từng request vẫn qua hàng đợi của engine nên không spam Discord.
-
-Muốn khỏi dán token mỗi lần: tạo secret `DISCORD_TOKEN` trong **Settings → Secrets and
-variables → Actions**, rồi sửa `required: true` thành `false` cho ô `token`. Khi ô trống,
-workflow tự dùng secret.
-
-<a id="chay-tren-may"></a>
-
-## Chạy trên máy
+## Quick start
 
 ```bash
+git clone https://github.com/KashikoKanda/discord-quest-auto
+cd discord-quest-auto
 npm install
-cp .env.example .env      # dán token vào TOKEN=
-npm start                 # làm hết quest rồi thoát
+npm start
 ```
 
-Cần Node 20 trở lên.
+No `.env` yet? `npm start` asks for the token in the terminal, hides what you type, and
+offers to save it to `.env` so you never paste it twice.
 
-<a id="lenh"></a>
-
-## Lệnh
-
-| Lệnh                              | Việc nó làm                               |
-| :-------------------------------- | :---------------------------------------- |
-| `npm start`                       | Làm mọi quest đang có (không nhận thưởng) |
-| `npm run list`                    | Xem danh sách quest kèm tiến trình        |
-| `npm run claim`                   | Chỉ nhận thưởng cho quest đã xong         |
-| `npm run auto`                    | Chạy nền, 5 phút quét quest mới một lần   |
-| `npm run status`                  | Tiến trình nền đang làm gì                |
-| `tsx --env-file=.env bot.ts stop` | Dừng `run` hoặc `auto` đang chạy          |
-
-<a id="co"></a>
-
-## Cờ
-
-Đặt sau lệnh:
+Prefer files? Copy the example and fill it in:
 
 ```bash
-tsx --env-file=.env bot.ts run --quest=<id>    # một quest duy nhất
-tsx --env-file=.env bot.ts run --multi         # chạy song song thay vì lần lượt
-tsx --env-file=.env bot.ts run --log=run.log   # đổi file log (mặc định logs/quest-<ngày>.log)
-tsx --env-file=.env bot.ts run --gap=20        # nghỉ tối thiểu 20s giữa hai quest
-tsx --env-file=.env bot.ts list --all          # gồm cả quest đã nhận thưởng
-tsx --env-file=.env bot.ts list --json         # dạng JSON
-tsx --env-file=.env bot.ts auto --force        # bỏ qua kiểm tra server bắt buộc
+cp .env.example .env      # Windows cmd: copy .env.example .env
 ```
 
-Chạy dài hạn trong tmux:
+```ini
+TOKEN=your_account_token
+```
+
+Then `npm start`. Quests run one after another, and the tool stops when nothing is left.
+
+> The token is a **user** token, not a bot token. `npm start` prints an invite link if
+> the account is not in the server that Discord requires for rewards.
+
+<a id="platforms"></a>
+
+## Platforms
+
+### Linux and macOS
+
+```bash
+npm install && npm start
+```
+
+Long runs belong in tmux or screen:
 
 ```bash
 tmux new -s quest 'npm run auto'
-# thoát ra: Ctrl-B rồi D   ·   quay lại: tmux attach -t quest
+# leave: Ctrl-B then D      come back: tmux attach -t quest
 ```
 
-<a id="cau-hinh"></a>
+### Windows (cmd and PowerShell)
 
-## Cấu hình
-
-| Biến          | Mặc định            | Ý nghĩa                                                                  |
-| :------------ | :------------------ | :----------------------------------------------------------------------- |
-| `TOKEN`       | bắt buộc            | Token tài khoản. Trên Actions lấy từ ô nhập, hoặc secret `DISCORD_TOKEN` |
-| `QUEST_STORE` | `.quest-store.json` | Nơi lưu fingerprint của từng token                                       |
-| `QUEST_STATE` | `.quest-state.json` | File pid cho `status` và `stop`                                          |
-
-Hai file đầu được tạo ở lần chạy đầu và đã nằm trong `.gitignore`.
-
-<a id="cau-truc"></a>
-
-## Cấu trúc dự án
-
-```
-bot.ts                  điều phối lệnh, cờ, đọc log
-src/
-  api/
-    client.ts           REST: header fingerprint, build number, list/enroll/claim
-    gateway.ts          socket gateway: identify, presence, heartbeat
-  core/
-    state.ts            trạng thái mỗi token: hàng đợi, log, tiến trình, abort
-    queue.ts            hàng đợi API riêng từng token: giãn cách, retry 429, backoff 5xx
-    store.ts            lưu fingerprint
-    config.ts           .env, token id, file pid
-    constants.ts        endpoint, server bắt buộc, thời gian
-    interface.ts        type dùng chung
-    logger.ts           in ra terminal và file
-  quests/
-    quest.ts            helper đọc shape quest + wrapper Quest
-    video.ts            WATCH_VIDEO, WATCH_VIDEO_ON_MOBILE
-    play.ts             PLAY_ON_DESKTOP và bản console
-    activity.ts         PLAY_ACTIVITY
-    achievement.ts      ACHIEVEMENT_IN_ACTIVITY
-    index.ts            dispatcher: bỏ qua, enroll, chuyển đúng handler
-  worker.ts             điều phối lượt chạy: batch, auto loop, API công khai
+```bat
+npm install
+copy .env.example .env
+npm start
 ```
 
-Thêm một loại quest = thêm một file trong `src/quests/` và một `case` trong
-`src/quests/index.ts`.
+The token prompt, colours, `list`, `claim`, `auto`, `status` and `stop` all behave the
+same in `cmd` and PowerShell. In PowerShell you can also pass the token inline:
 
-<a id="luot-chay"></a>
+```powershell
+$env:TOKEN = 'your_account_token'; npm start
+```
 
-## Một lượt chạy
+No colour in an old console or a redirected pipe? It turns itself off. Force it with
+`--no-color` or `set NO_COLOR=1`.
+
+### Android (Termux)
+
+```bash
+pkg update && pkg install nodejs-lts git
+git clone https://github.com/KashikoKanda/discord-quest-auto
+cd discord-quest-auto
+npm install
+npm start
+```
+
+Termux notes, in the order they usually matter:
+
+| Situation                           | What to do                                                        |
+| :---------------------------------- | :---------------------------------------------------------------- |
+| Phone sleeps and the run dies       | `termux-wake-lock` before starting, `termux-wake-unlock` after    |
+| Session closes when you switch apps | `pkg install tmux`, then `tmux new -s quest 'npm run auto'`       |
+| `npm install` fails on esbuild      | `pkg install python make clang`, then `npm install` again         |
+| Storage blocked                     | Keep the project in `~/discord-quest-auto`, not on shared storage |
+
+Battery and network are the real limits on a phone. `npm start` finishes and exits,
+which is the friendliest mode for Termux; `npm run auto` is for a plugged-in device.
+
+### GitHub Actions
+
+No machine to babysit, no secret to create first.
+
+1. **Fork** this repository (or use it directly).
+2. Open **Actions → Quests → Run workflow**.
+3. Paste the token, leave the **multi** switch on, press **Run workflow**.
+
+| Input      | What it does                                                                        |
+| :--------- | :---------------------------------------------------------------------------------- |
+| `token`    | Account token. Masked in the log before anything runs, never written to disk        |
+| `multi`    | **On** (default) every quest that still needs work, **off** only the `quest_id` one |
+| `quest_id` | Quest id, required when `multi` is off                                              |
+| `gap`      | Minimum seconds between two quests, default `10`                                    |
+
+The workflow keeps `.quest-store.json` in the Actions cache, so an account keeps one
+device identity across runs, and uploads the log as an artifact. A run **completes
+quests only**; claiming rewards stays on your machine (`npm run claim`).
+
+Want to skip the prompt? Add a repository secret named `DISCORD_TOKEN`.
+
+<a id="commands"></a>
+
+## Commands
+
+| Command               | What it does                                         |
+| :-------------------- | :--------------------------------------------------- |
+| `npm start`           | Run every available quest, then exit                 |
+| `npm run list`        | List quests with progress                            |
+| `npm run claim`       | Claim rewards for quests that already finished       |
+| `npm run auto`        | Run as a background loop, rescanning every 5 minutes |
+| `npm run status`      | Show the background loop and live Discord progress   |
+| `npx tsx bot.ts stop` | Stop a running `run` or `auto`                       |
+
+### Flags
+
+```bash
+npx tsx bot.ts run --quest=<id>     # a single quest
+npx tsx bot.ts run --multi          # every quest at once instead of one by one
+npx tsx bot.ts run --gap=20         # at least 20 s between two quests
+npx tsx bot.ts run --log=run.log    # custom log file (default logs/quest-<date>.log)
+npx tsx bot.ts list --all           # include claimed quests
+npx tsx bot.ts list --json          # machine readable
+npx tsx bot.ts auto --force         # skip the required-server check
+npx tsx bot.ts run --token=<token>  # override the token from .env
+npx tsx bot.ts run --no-color       # plain output for logs
+```
+
+### Configuration
+
+| Variable      | Default             | Meaning                                    |
+| :------------ | :------------------ | :----------------------------------------- |
+| `TOKEN`       | required            | Account token; the prompt fills it for you |
+| `QUEST_STORE` | `.quest-store.json` | Where each token's fingerprint lives       |
+| `QUEST_STATE` | `.quest-state.json` | pid file used by `status` and `stop`       |
+| `NO_COLOR`    | unset               | Any value disables ANSI colours            |
+
+Both JSON files are created on first run and are git-ignored.
+
+<a id="how-it-works"></a>
+
+## How it works
 
 ```
 bot.ts              worker.ts            api/client.ts             Discord
 ──────              ─────────            ─────────────             ───────
-đọc .env     ──▶    mở gateway      ──▶  POST /quests/@me/enroll
-                    GET /quests/@me
-                    quests/index.ts   ──▶  video-progress · heartbeat · discordsays
-                    poll user_status  (dừng ở đây)
-
-bot.ts claim        claimCompleted    ──▶  POST /quests/@me/{id}/claim
+read .env    ──▶    open gateway    ──▶  GET  /quests/@me
+                    list quests
+                    quests/index.ts ──▶   POST /quests/@me/enroll
+                    poll user_status
+                    claim (manual)  ──▶   POST /quests/@me/{id}/claim
 ```
 
-<a id="loai-quest"></a>
+```
+bot.ts                  command line: flags, token, log tail
+src/
+  api/
+    client.ts           REST: fingerprint headers, build number, list/enroll/claim
+    gateway.ts          socket gateway: identify, presence, heartbeat
+  core/
+    state.ts            per-token state: queue, logs, progress, abort controllers
+    queue.ts            per-token API queue: spacing, 429 retry, 5xx backoff
+    store.ts            fingerprint storage
+    config.ts           .env, token id, pid file
+    constants.ts        endpoints, required server, timings
+    interface.ts        shared types
+    logger.ts           terminal and file output
+  quests/
+    quest.ts            quest shape helpers + the Quest wrapper
+    video.ts            WATCH_VIDEO, WATCH_VIDEO_ON_MOBILE
+    play.ts             PLAY_ON_DESKTOP and the console variant
+    activity.ts         PLAY_ACTIVITY
+    achievement.ts      ACHIEVEMENT_IN_ACTIVITY
+    index.ts            dispatcher: skip, enroll, hand off to the right handler
+  worker.ts             run orchestration: batches, auto loop, public API
+```
 
-## Loại quest
+Adding a quest type means one file in `src/quests/` and one `case` in
+`src/quests/index.ts`.
 
-| Loại                                                     | Module           | Cách hoàn thành                                                                             |
-| :------------------------------------------------------- | :--------------- | :------------------------------------------------------------------------------------------ |
-| `WATCH_VIDEO`, `WATCH_VIDEO_ON_MOBILE`                   | `video.ts`       | Gửi `video-progress` với timestamp tăng dần tới khi đủ số giây                              |
-| `PLAY_ON_DESKTOP`, `PLAY_ON_XBOX`, `PLAY_ON_PLAYSTATION` | `play.ts`        | Presence + heartbeat kèm application id tới khi Discord báo xong                            |
-| `PLAY_ACTIVITY`                                          | `activity.ts`    | Heartbeat của activity tới khi đủ thời lượng                                                |
-| `ACHIEVEMENT_IN_ACTIVITY`                                | `achievement.ts` | Xin ticket, mở activity instance, heartbeat trên `*.discordsays.com` tới khi achievement nổ |
-| `STREAM_ON_DESKTOP`                                      | bỏ qua           | Discord chỉ tính khi stream từ client desktop thật                                          |
+### Quest types
 
-Thưởng yêu cầu tài khoản ở server bắt buộc. Không ở đó thì quest vẫn chạy nhưng không
-nhận thưởng; link mời in ra lúc khởi động.
+| Type                                                     | Module           | How it completes                                                                        |
+| :------------------------------------------------------- | :--------------- | :-------------------------------------------------------------------------------------- |
+| `WATCH_VIDEO`, `WATCH_VIDEO_ON_MOBILE`                   | `video.ts`       | Sends `video-progress` with an increasing timestamp until the seconds are met           |
+| `PLAY_ON_DESKTOP`, `PLAY_ON_XBOX`, `PLAY_ON_PLAYSTATION` | `play.ts`        | Presence plus heartbeat with the application id until Discord reports it done           |
+| `PLAY_ACTIVITY`                                          | `activity.ts`    | Activity heartbeat until the duration is reached                                        |
+| `ACHIEVEMENT_IN_ACTIVITY`                                | `achievement.ts` | Ticket, activity instance, heartbeat on `*.discordsays.com` until the achievement fires |
+| `STREAM_ON_DESKTOP`                                      | skipped          | Discord only counts a stream from a real desktop client                                 |
 
-<a id="ba-nguyen-tac"></a>
+### Three rules that keep an account alive
 
-## Ba nguyên tắc an toàn
+- **One queue per token.** Requests are 1.5–3 s apart, `retry-after` is honoured and
+  `5xx` backs off exponentially. Two requests never overlap.
+- **Progress in real time.** A video quest sends one second of watch time per real
+  second; play and activity quests heartbeat every 30 s like the real client.
+- **One fixed fingerprint.** User agent, locale, timezone, launch id and session id are
+  generated once per token and reused on every later run.
 
-- **Một hàng đợi mỗi token.** Request cách nhau 1500–3000 ms, 429 tôn trọng
-  `retry-after`, 5xx backoff lũy thừa. Không bao giờ có hai request cùng lúc.
-- **Tiến trình theo thời gian thực.** Quest video gửi 1 giây xem cho mỗi 1 giây thật;
-  quest play/activity heartbeat mỗi 30 giây như client thật.
-- **Một fingerprint cố định.** User agent, locale, timezone, launch id, session id
-  sinh một lần cho mỗi token và dùng lại ở mọi lần chạy sau.
+Quest by quest is the default. `--multi` runs them together, still through the same
+queue, still with `gap` seconds between starts in the Actions workflow.
 
-Mặc định quest chạy lần lượt. `--multi` chạy song song nhưng vẫn qua cùng một hàng đợi.
+<a id="troubleshooting"></a>
 
-<a id="phat-trien"></a>
+## Troubleshooting
 
-## Phát triển
+| Symptom                                          | Cause                                                            |
+| :----------------------------------------------- | :--------------------------------------------------------------- |
+| `Invalid or expired token`                       | Token was rotated or pasted wrong, grab a fresh one              |
+| Token prompt keeps coming back                   | Nothing saved to `.env`; answer `y` to the save question         |
+| Quest finished but no reward                     | Account is not in the server Discord requires                    |
+| A quest is skipped as "not available on Node.js" | That is `STREAM_ON_DESKTOP`                                      |
+| Video quest stalls halfway                       | Gateway session dropped, run again                               |
+| `EACCES` creating `logs/`                        | Run from the project folder, or pass `--log=` somewhere writable |
+| Odd symbols instead of colours                   | Old console; `--no-color` or `NO_COLOR=1`                        |
+
+## Development
 
 ```bash
 npm run typecheck     # tsc --noEmit
 npm run format        # prettier --write
-npm run ci            # typecheck + kiểm tra format
+npm run ci            # typecheck + format check
 ```
 
-CI chạy đúng hai bước này ở mỗi push và pull request.
+CI runs exactly those two checks on every push and pull request.
 
-<a id="loi-thuong-gap"></a>
+## Disclaimer
 
-## Lỗi thường gặp
+Use your own token and your own account. Automating an account can violate Discord's
+Terms of Service; the risk is yours. This project exists to save a few minutes of
+watching a video, not to farm a marketplace.
 
-| Hiện tượng                                             | Nguyên nhân                                                    |
-| :----------------------------------------------------- | :------------------------------------------------------------- |
-| `Token không hợp lệ hoặc đã hết hạn`                   | Token bị xoay hoặc dán sai, lấy token mới                      |
-| `Thiếu token`                                          | `TOKEN=` đang trống, hoặc chưa nhập ô `token` / chưa có secret |
-| Quest xong mà không thấy thưởng                        | Tài khoản không ở server bắt buộc                              |
-| Một quest bị bỏ qua với "không hoạt động trên Node.js" | Đó là `STREAM_ON_DESKTOP`                                      |
-| Quest video đứng giữa chừng                            | Gateway rớt phiên, chạy lại là được                            |
-
-<a id="mien-tru"></a>
-
-## Miễn trừ
-
-Dùng token của chính bạn và mô phỏng luồng client chính chủ. Tự động hoá tài khoản có
-thể vi phạm Terms of Service của Discord. Tự chịu rủi ro, chỉ dùng với tài khoản của bạn.
-
-<a id="giay-phep"></a>
-
-## Giấy phép
+## License
 
 MIT

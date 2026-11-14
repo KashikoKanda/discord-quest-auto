@@ -19,12 +19,12 @@
     "orbs"
   ],
   "scripts": {
-    "start": "tsx --env-file=.env bot.ts",
-    "dev": "tsx --env-file=.env bot.ts",
-    "list": "tsx --env-file=.env bot.ts list",
-    "auto": "tsx --env-file=.env bot.ts auto",
-    "status": "tsx --env-file=.env bot.ts status",
-    "claim": "tsx --env-file=.env bot.ts claim",
+    "start": "tsx bot.ts",
+    "dev": "tsx bot.ts",
+    "list": "tsx bot.ts list",
+    "auto": "tsx bot.ts auto",
+    "status": "tsx bot.ts status",
+    "claim": "tsx bot.ts claim",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write \"bot.ts\" \"src/**/*.ts\"",
     "format:check": "prettier --check \"bot.ts\" \"src/**/*.ts\"",

@@ -1,15 +1,17 @@
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
+const ANSI_ON = !process.env.NO_COLOR && !process.argv.includes('--no-color') && process.stdout.isTTY !== false;
+
 const COLOR = {
-	reset: '\u001b[0m',
-	dim: '\u001b[2m',
-	bold: '\u001b[1m',
-	red: '\u001b[31m',
-	green: '\u001b[32m',
-	yellow: '\u001b[33m',
-	cyan: '\u001b[36m',
-	magenta: '\u001b[35m',
+	reset: ANSI_ON ? '\u001b[0m' : '',
+	dim: ANSI_ON ? '\u001b[2m' : '',
+	bold: ANSI_ON ? '\u001b[1m' : '',
+	red: ANSI_ON ? '\u001b[31m' : '',
+	green: ANSI_ON ? '\u001b[32m' : '',
+	yellow: ANSI_ON ? '\u001b[33m' : '',
+	cyan: ANSI_ON ? '\u001b[36m' : '',
+	magenta: ANSI_ON ? '\u001b[35m' : '',
 };
 
 export type Level = 'info' | 'warn' | 'error' | 'success' | 'step';
@@ -47,7 +49,7 @@ const paint = {
 };
 
 export function log(level: Level, message: string): void {
-	const time = new Date().toLocaleTimeString('vi-VN', { hour12: false });
+	const time = new Date().toTimeString().slice(0, 8);
 	process.stdout.write(`${paint.dim(time)} ${PAINT[level](ICON[level])} ${message}\n`);
 
 	if (logFile) {

@@ -1,4 +1,5 @@
-#!/usr/bin/env bun
+#!/usr/bin/env -S npx tsx
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { loadEnv, getToken, tokenIdFor, readState, writeState, clearState, isAlive } from './src/core/config';
 import { logger } from './src/core/logger';
 import type { Command, QuestShape } from './src/core/interface';
@@ -18,7 +19,11 @@ const has = (name: string) => argv.includes(`--${name}`);
 const HELP = `Discord Quest Auto
 
 Cách dùng
-  tsx --env-file=.env bot.ts [lệnh] [tuỳ chọn]
+  npm start                      chạy trong terminal, hỏi token nếu chưa có
+  npx tsx bot.ts [lệnh] [tuỳ chọn]
+
+Chưa có TOKEN trong .env thì bot hỏi ngay trong terminal (gõ bị che), xong hỏi
+có lưu vào .env hay không.
 
 Lệnh
   run       làm toàn bộ quest đang có rồi tự nhận thưởng   (mặc định)
@@ -35,7 +40,107 @@ Tuỳ chọn
   --json           (list) in JSON
   --log=<file>     ghi log ra file
   --gap=<giây>     nghỉ tối thiểu giữa hai quest (mặc định 10)
-  --token=<token>  dùng token khác trong .env`;
+  --no-color       tắt màu (hoặc đặt NO_COLOR=1)
+  --token=<token>  dùng token khác trong .env
+
+Môi trường: Linux, macOS, Windows (cmd/PowerShell), Termux. Cần Node 20+.
+Gõ: npm start | npm run list | npm run claim | npm run auto`;
+
+/** Đọc token từ bàn phím: che ký tự khi có TTY, đọc dòng đầu khi bị pipe. */
+async function askToken(): Promise<string | null> {
+	const stdin = process.stdin;
+
+	if (!stdin.isTTY) {
+		// Cho phép `echo $TOKEN | npm start`, nhưng không treo khi stdin câm.
+		const piped = (async () => {
+			let text = '';
+			for await (const chunk of stdin) {
+				text += String(chunk);
+				if (text.includes('\n')) break;
+			}
+			return text.split(/\r?\n/)[0]?.trim() || null;
+		})();
+		const quiet = new Promise<null>((resolve) => setTimeout(() => resolve(null), 400));
+		return Promise.race([piped, quiet]);
+	}
+
+	process.stdout.write(`${logger.color.cyan}?${logger.color.reset} Dán token Discord: `);
+	stdin.setRawMode?.(true);
+	stdin.resume();
+	stdin.setEncoding('utf8');
+
+	return new Promise((resolve) => {
+		let value = '';
+		const finish = (result: string | null) => {
+			stdin.off('data', onData);
+			stdin.setRawMode?.(false);
+			stdin.pause();
+			process.stdout.write('\n');
+			resolve(result);
+		};
+		const onData = (chunk: string) => {
+			for (const ch of chunk) {
+				if (ch === '\r' || ch === '\n') return finish(value.trim() || null);
+				if (ch === '\u0003') {
+					process.stdout.write('\n');
+					process.exit(130);
+				}
+				if (ch === '\u007f' || ch === '\b') {
+					if (value) {
+						value = value.slice(0, -1);
+						process.stdout.write('\b \b');
+					}
+					continue;
+				}
+				if (ch >= ' ') {
+					value += ch;
+					process.stdout.write('*');
+				}
+			}
+		};
+		stdin.on('data', onData);
+	});
+}
+
+/** Hỏi có/không bằng một phím. */
+async function confirm(question: string, fallback = true): Promise<boolean> {
+	const stdin = process.stdin;
+	if (!stdin.isTTY) return false;
+
+	process.stdout.write(`${logger.color.cyan}?${logger.color.reset} ${question} ${fallback ? '(Y/n)' : '(y/N)'} `);
+	stdin.setRawMode?.(true);
+	stdin.resume();
+	stdin.setEncoding('utf8');
+
+	return new Promise((resolve) => {
+		const finish = (answer: boolean) => {
+			stdin.off('data', onData);
+			stdin.setRawMode?.(false);
+			stdin.pause();
+			process.stdout.write(`${answer ? 'có' : 'không'}\n`);
+			resolve(answer);
+		};
+		const onData = (chunk: string) => {
+			const ch = chunk.toLowerCase();
+			if (ch === '\u0003') process.exit(130);
+			if (ch.includes('y')) return finish(true);
+			if (ch.includes('n')) return finish(false);
+			if (ch === '\r' || ch === '\n') return finish(fallback);
+		};
+		stdin.on('data', onData);
+	});
+}
+
+/** Ghi token vào .env để lần sau khỏi dán. */
+function saveToken(token: string): void {
+	const file = '.env';
+	const lines = existsSync(file) ? readFileSync(file, 'utf8').split('\n') : [];
+	const kept = lines.filter((line) => !/^\s*TOKEN\s*=/.test(line));
+	while (kept.length && kept[kept.length - 1].trim() === '') kept.pop();
+	kept.push(`TOKEN=${token}`, '');
+	writeFileSync(file, kept.join('\n'));
+	logger.success('Đã lưu token vào .env.');
+}
 
 /** In log của engine ra terminal cho tới khi hàng đợi rảnh. */
 async function tail(tokenId: string, untilIdle: boolean): Promise<void> {
@@ -148,7 +253,15 @@ async function main(): Promise<void> {
 		return;
 	}
 
-	const token = getToken(flag('token'));
+	let token: string;
+	try {
+		token = getToken(flag('token'));
+	} catch (error) {
+		const typed = await askToken();
+		if (!typed) throw error;
+		token = typed;
+		if (await confirm('Lưu token vào .env cho lần sau?')) saveToken(token);
+	}
 
 	if (command === 'status') {
 		const state = readState();
