@@ -2,7 +2,7 @@ import { existsSync, rmSync, writeFileSync } from 'node:fs';
 import { AUTO_INTERVAL_MS } from './core/constants';
 import { fetchDiscordQuests, enrollQuest, clearFingerprint, initBuildVersion } from './api/client';
 import { connectGateway, disconnectGateway } from './api/gateway';
-import { addLog, clearAllIntervals, getGlobalState } from './core/state';
+import { addLog, clearAllIntervals, getGlobalState, rnd, sleep } from './core/state';
 import type { QuestProgress, TokenState } from './core/state';
 import { isQuestCompleted, isQuestExpired } from './quests/quest';
 import { processQuest } from './quests';
@@ -405,7 +405,7 @@ export const QuestWorker = {
 		tokenId: string,
 		questId: string,
 		questData?: Record<string, unknown>,
-	): Promise<{ success: boolean; message: string }> {
+	): Promise<{ success: boolean; captcha?: boolean; message: string }> {
 		const state = getGlobalState().get(tokenId);
 		if (!state) return { success: false, message: 'Token chưa đăng ký' };
 
@@ -417,11 +417,48 @@ export const QuestWorker = {
 				return { success: true, message: 'Đã nhận thưởng' };
 			}
 			const text = await res.text().catch(() => '');
+			// Discord chặn mọi lần nhận thưởng bằng hCaptcha khi thấy tài khoản không
+			// phải client chính thức. Không có đường vòng hợp lệ, nên báo rõ để người
+			// dùng mở app nhận tay thay vì thử lại liên tục.
+			if (text.includes('captcha')) {
+				addLog(tokenId, 'warn', `Quest ${questId} cần captcha khi nhận thưởng, phải nhận trong app Discord.`);
+				return { success: false, captcha: true, message: 'Discord yêu cầu captcha, cần nhận trong app' };
+			}
 			addLog(tokenId, 'error', `Nhận thưởng quest ${questId} thất bại: ${res.status}`);
 			return { success: false, message: `Lỗi: ${res.status} ${text.slice(0, 100)}` };
 		} catch (err: unknown) {
 			const msg = err instanceof Error ? err.message : String(err);
 			return { success: false, message: msg };
 		}
+	},
+
+	/** Nhận thưởng cho mọi quest đã xong mà chưa nhận, lần lượt từng cái. */
+	async claimAll(tokenId: string): Promise<{
+		total: number;
+		claimed: number;
+		captcha: number;
+		failed: number;
+		names: string[];
+	}> {
+		const state = getGlobalState().get(tokenId);
+		if (!state) return { total: 0, claimed: 0, captcha: 0, failed: 0, names: [] };
+
+		const { fetchDiscordQuests } = await import('./api/client');
+		const { Quest } = await import('./quests/quest');
+		const { quests } = await fetchDiscordQuests(state.token, tokenId);
+		const pending = quests
+			.map((item) => Quest.create(item as Parameters<typeof Quest.create>[0]))
+			.filter((quest) => quest.isCompleted() && !quest.isClaimed());
+
+		const result = { total: pending.length, claimed: 0, captcha: 0, failed: 0, names: [] as string[] };
+		for (const quest of pending) {
+			result.names.push(quest.name);
+			const one = await this.claimReward(tokenId, quest.id, quest.raw);
+			if (one.success) result.claimed += 1;
+			else if (one.captcha) result.captcha += 1;
+			else result.failed += 1;
+			await sleep(rnd(1500, 3000));
+		}
+		return result;
 	},
 };

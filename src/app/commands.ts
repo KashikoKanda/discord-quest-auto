@@ -198,13 +198,28 @@ async function handleDeferredCommand(interaction: GatewayInteraction, command: C
 			const list = quests.map((item) => Quest.create(item));
 			// Chỉ hiện quest chưa làm và đang làm; quest đã xong thì ẩn đi.
 			const open = list.filter((quest) => quest.isOpen());
-			const waiting = list.filter((quest) => quest.isCompleted() && !quest.isClaimed()).length;
+			// Quest "ẩn": đã xong chờ nhận hoặc đã hết hạn. Không đưa vào danh sách
+			// chính, chỉ đếm và gọi tên vài cái để biết cần nhận gì.
+			const waiting = list.filter((quest) => quest.isCompleted() && !quest.isClaimed());
+			const expired = list.filter((quest) => quest.isExpired() && !quest.isCompleted());
 			const lines = open.slice(0, 18).map((quest) => {
 				const orbs = quest.orbs ? ` · ${quest.orbs} orbs` : '';
 				return `▸ **${quest.name}**\n\u2003\`${quest.type}\` · ${quest.label()}${orbs}\n\u2003${bar(quest.progress)}`;
 			});
 			const body = lines.join('\n') || 'Không còn quest nào để làm.';
-			const footer = waiting ? `\n\n✔ ${waiting} quest đã xong · nhận thưởng bằng \`/claim\`` : '';
+			const hiddenNames = waiting
+				.slice(0, 6)
+				.map((quest) => `▸ ${quest.name}`)
+				.join('\n');
+			const hiddenParts = [
+				`✔ **${waiting.length}** quest đã xong chờ nhận`,
+				expired.length ? `⌛ **${expired.length}** quest hết hạn chưa xong` : '',
+			].filter(Boolean);
+			const footer = hiddenParts.length
+				? `\n\n**Ẩn** · ${hiddenParts.join(' · ')}${hiddenNames ? `\n${hiddenNames}` : ''}${
+						waiting.length > 6 ? `\n… và ${waiting.length - 6} quest khác` : ''
+					}\nNhận thưởng: \`/claim\``
+				: '';
 			await editOriginal(interaction.token, {
 				embeds: [
 					embed(
@@ -244,23 +259,26 @@ async function handleDeferredCommand(interaction: GatewayInteraction, command: C
 
 	if (command === 'claim') {
 		try {
-			const { quests } = await fetchDiscordQuests(account.token, account.tokenId);
-			const pending = quests
-				.map((item) => Quest.create(item))
-				.filter((quest) => quest.isCompleted() && !quest.isClaimed());
-			if (pending.length === 0) {
+			const result = await QuestWorker.claimAll(account.tokenId);
+			if (result.total === 0) {
 				await editOriginal(interaction.token, {
 					embeds: [embed('Không có gì để nhận', 'Chưa có quest nào hoàn thành chờ thưởng.', 0xfaa61a)],
 				});
 				return;
 			}
-			const results: string[] = [];
-			for (const quest of pending) {
-				const result = await QuestWorker.claimReward(account.tokenId, quest.id, quest.raw);
-				results.push(`${result.success ? '✔' : '✖'} ${quest.name}`);
-			}
+			const list = result.names
+				.slice(0, 12)
+				.map((name) => `▸ ${name}`)
+				.join('\n');
+			const more = result.names.length > 12 ? `\n… và ${result.names.length - 12} quest khác` : '';
+			const note =
+				result.captcha > 0
+					? '\n\n**Discord chặn nhận thưởng bằng captcha.** Mở app Discord, vào Quests, bấm nhận cho các quest trên. Bot không vượt captcha.'
+					: '';
+			const title =
+				result.claimed > 0 ? `Đã nhận ${result.claimed}/${result.total} quest` : 'Chưa nhận được quest nào';
 			await editOriginal(interaction.token, {
-				embeds: [embed('Kết quả nhận thưởng', results.join('\n'), 0x57f287)],
+				embeds: [embed(title, `${list}${more}${note}`, result.claimed > 0 ? 0x57f287 : 0xfaa61a)],
 			});
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
