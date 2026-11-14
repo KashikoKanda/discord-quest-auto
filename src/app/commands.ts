@@ -296,19 +296,25 @@ async function handleDeferredCommand(interaction: GatewayInteraction, command: C
 				});
 				return;
 			}
-			const ready = list.filter((quest) => quest.enrollable);
-			const lines = list.slice(0, 14).map((quest) => {
-				const mark = quest.enrollable ? '✔' : '·';
-				return `${mark} **${quest.name}**\n\u2003\`${quest.type}\` · ${quest.minutes}m · ${quest.reason}\n\u2003\`${quest.id}\``;
+			const { loadProxies, proxySource } = await import('../core/proxies');
+			const proxies = await loadProxies().catch(() => []);
+			const source = proxySource();
+			const proxyNote = proxies.length
+				? `Proxy: ${proxies.length} đầu · ${source.url ? 'PROXY_LIST_URL' : 'PROXY_LIST_FILE'}`
+				: source.url || source.file
+					? 'Nguồn proxy có cấu hình nhưng danh sách rỗng.'
+					: 'Chưa cấu hình proxy (PROXY_LIST_URL).';
+
+			const lines = list.slice(0, 15).map((quest) => {
+				const tag = quest.region?.isGlobal && quest.region.include.length === 0 ? 'toàn cầu' : quest.reason;
+				return `▸ **${quest.name}** · ${quest.minutes}m · \`${quest.type}\`\n\u2003${tag} · \`${quest.id}\``;
 			});
-			const more = list.length > 14 ? `\n… và ${list.length - 14} quest khác` : '';
-			const hint = ready.length
-				? `\n\nNhận quest: \`/hidden enroll:<id>\``
-				: '\n\nHiện không có quest ẩn nào nhận được từ vùng VN.';
+			const more = list.length > 15 ? `\n… và ${list.length - 15} quest khác` : '';
+			const hint = `\n\nNhận quest: \`/hidden enroll:<id>\`\n${proxyNote}`;
 			await editOriginal(interaction.token, {
 				embeds: [
 					embed(
-						`Quest ẩn · ${list.length} quest · nhận được ${ready.length}`,
+						`Quest ẩn · ${list.length} quest tài khoản chưa có`,
 						`${lines.join('\n')}${more}${hint}`,
 						0x5865f2,
 					),

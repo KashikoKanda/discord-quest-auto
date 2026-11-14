@@ -231,7 +231,12 @@ export async function fetchRegions(): Promise<Map<string, QuestRegion>> {
 	return map;
 }
 
-/** Quest có trong danh mục nhưng tài khoản không thấy, tức quest ẩn. */
+/**
+ * Quest có trong danh mục công khai mà tài khoản chưa có.
+ *
+ * Không lọc theo vùng: người dùng muốn thấy hết, còn việc nhận được hay không thì
+ * để lúc nhận mới biết (hoặc nhờ proxy đúng vùng). `blocked` chỉ là gợi ý.
+ */
 export async function fetchHiddenQuests(ownedIds: Set<string>, country: string): Promise<HiddenQuest[]> {
 	const catalog = await fetchCatalog();
 	const regions = await fetchRegions();
@@ -242,25 +247,33 @@ export async function fetchHiddenQuests(ownedIds: Set<string>, country: string):
 		.map((quest) => {
 			const region = regions.get(quest.id) ?? null;
 			if (region === null) {
-				// Không có dòng vùng nghĩa là quest chỉ phát cho nhóm được nhắm tới;
-				// lần thử nhận sẽ trả 260008 nên đừng hứa là nhận được.
 				return { ...quest, region, enrollable: false, reason: 'chưa rõ vùng' };
 			}
 			if (region.ageGate) {
 				return { ...quest, region, enrollable: false, reason: 'cần xác minh tuổi' };
 			}
-			if (region.isGlobal && region.exclude.length === 0) {
-				return { ...quest, region, enrollable: true, reason: 'toàn cầu' };
-			}
 			if (region.exclude.includes(code)) {
 				return { ...quest, region, enrollable: false, reason: `loại trừ ${code}` };
 			}
-			if (region.include.length === 0 || region.include.includes(code)) {
-				return { ...quest, region, enrollable: true, reason: region.include.length ? `vùng ${code}` : 'mở' };
+			if (region.isGlobal && region.include.length === 0) {
+				return { ...quest, region, enrollable: true, reason: 'toàn cầu' };
 			}
-			return { ...quest, region, enrollable: false, reason: `chỉ ${region.include.slice(0, 3).join('/')}` };
+			if (region.include.includes(code)) {
+				return { ...quest, region, enrollable: true, reason: `vùng ${code}` };
+			}
+			if (region.include.length === 0) {
+				return { ...quest, region, enrollable: true, reason: 'mở' };
+			}
+			return { ...quest, region, enrollable: false, reason: region.include.slice(0, 3).join('/') };
 		})
-		.sort((a, b) => Number(b.enrollable) - Number(a.enrollable) || a.minutes - b.minutes);
+		.sort((a, b) => a.minutes - b.minutes || a.name.localeCompare(b.name));
+}
+
+/** Quốc gia cần cho proxy khi nhận quest này, null nếu không rõ. */
+export function regionCountry(quest: HiddenQuest): string | null {
+	if (quest.enrollable) return null;
+	const include = quest.region?.include ?? [];
+	return include.length === 1 ? include[0] : (include[0] ?? null);
 }
 
 export function resetCatalogCache(): void {

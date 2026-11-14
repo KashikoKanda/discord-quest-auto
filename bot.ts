@@ -381,20 +381,33 @@ async function main(): Promise<void> {
 			return;
 		}
 
-		logger.header('Quest ẩn', `${list.length} quest · vùng ${country}`);
+		logger.header('Quest ẩn', `${list.length} quest tài khoản chưa có`);
 		if (list.length === 0) {
 			logger.info('Không có quest ẩn nào.');
 			return;
 		}
-		for (const quest of list.slice(0, 30)) {
-			const mark = quest.enrollable ? '✔' : '·';
+
+		for (const quest of list.slice(0, 40)) {
+			const tag = quest.region?.isGlobal && quest.region.include.length === 0 ? 'toàn cầu' : quest.reason;
 			logger.plain(
-				`  ${mark} ${quest.id}  ${String(quest.minutes).padStart(3)}m  ${quest.type.padEnd(22)} ${quest.name.slice(0, 38)}  (${quest.reason})`,
+				`  ${String(quest.minutes).padStart(3)}m  ${quest.type.padEnd(22)} ${quest.name.slice(0, 34).padEnd(34)} ${tag}  ${quest.id}`,
 			);
 		}
-		if (list.length > 30) logger.info(`… và ${list.length - 30} quest khác.`);
-		const ready = list.filter((quest) => quest.enrollable).length;
-		logger.info(`Nhận được ${ready}/${list.length} quest. Nhận một quest: npm start hidden --enroll=<id>`);
+		if (list.length > 40) logger.info(`… và ${list.length - 40} quest khác.`);
+
+		const { loadProxies, proxySource } = await import('./src/core/proxies');
+		const proxies = await loadProxies().catch(() => []);
+		const source = proxySource();
+		if (proxies.length > 0) {
+			logger.info(`Proxy: ${proxies.length} đầu (${source.url ? 'từ PROXY_LIST_URL' : 'từ PROXY_LIST_FILE'}).`);
+		} else if (source.url || source.file) {
+			logger.warn('Nguồn proxy có cấu hình nhưng danh sách rỗng hoặc không tải được.');
+		} else {
+			logger.info('Chưa cấu hình proxy · đặt PROXY_LIST_URL (raw GitHub) để nhận quest khác vùng.');
+		}
+		logger.info(
+			`Nhận quest: npm start hidden --enroll=<id> (vùng ${country} · ${list.filter((q) => q.enrollable).length} quest nhận trực tiếp được)`,
+		);
 		return;
 	}
 

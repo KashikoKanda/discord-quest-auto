@@ -375,7 +375,20 @@ export async function discordFetch(
 		...customHeaders,
 	};
 
-	const res = await fetch(url, { ...options, headers });
+	// Quest vùng khác cần đi qua proxy đúng quốc gia. Chỉ request được đánh dấu
+	// proxyUrl mới rời khỏi kết nối trực tiếp, phần còn lại giữ nguyên.
+	const { proxyUrl, ...rest } = options as RequestInit & { proxyUrl?: string };
+	if (proxyUrl) {
+		const { ProxyAgent, fetch: undiciFetch } = await import('undici');
+		const res = await undiciFetch(url, {
+			...rest,
+			headers,
+			dispatcher: new ProxyAgent(proxyUrl),
+		} as Parameters<typeof undiciFetch>[1]);
+		return res as unknown as Response;
+	}
+
+	const res = await fetch(url, { ...rest, headers });
 	return res;
 }
 
@@ -454,6 +467,7 @@ export async function enrollQuest(
 	isAndroid: boolean = false,
 	tokenId?: string,
 	questData?: Record<string, unknown>,
+	proxyUrl?: string,
 ): Promise<Response> {
 	const location = isAndroid ? 12 : 11;
 	// aiko: pass traffic_metadata_raw and traffic_metadata_sealed from quest data
@@ -474,7 +488,8 @@ export async function enrollQuest(
 			headers: {
 				AndroidRequest: isAndroid ? 'true' : 'false',
 			},
-		},
+			...(proxyUrl ? { proxyUrl } : {}),
+		} as RequestInit & { proxyUrl?: string },
 		tokenId,
 	);
 }

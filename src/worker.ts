@@ -450,16 +450,31 @@ export const QuestWorker = {
 		if (!state) return { success: false, message: 'Token chưa đăng ký' };
 
 		const { enrollQuest } = await import('./api/client');
-		const { fetchCatalog } = await import('./api/catalog');
+		const { fetchCatalog, fetchRegions } = await import('./api/catalog');
+		const { pickProxy } = await import('./core/proxies');
 		const catalog = await fetchCatalog().catch(() => []);
 		const quest = catalog.find((item) => item.id === questId);
 
-		const res = await enrollQuest(state.token, questId, false, tokenId, quest?.raw);
-		const body = await res.text().catch(() => '');
+		// Quest giới hạn vùng: chọn proxy mang thẻ quốc gia tương ứng nếu có.
+		const regions = await fetchRegions().catch(() => new Map());
+		const region = regions.get(questId);
+		const country = region && region.include.length > 0 ? region.include[0] : null;
+		const proxy = await pickProxy(country).catch(() => null);
+
+		let res = await enrollQuest(state.token, questId, false, tokenId, quest?.raw, proxy?.url);
+		let body = await res.text().catch(() => '');
+		const viaProxy = Boolean(proxy);
+		if (!res.ok && proxy && (res.status === 403 || res.status === 429 || body.includes('260008'))) {
+			// Proxy hỏng hoặc sai vùng: thử lại trực tiếp để không mất lượt.
+			addLog(tokenId, 'warn', `Proxy ${proxy.label} không nhận được quest ${questId}, thử trực tiếp.`);
+			res = await enrollQuest(state.token, questId, false, tokenId, quest?.raw);
+			body = await res.text().catch(() => '');
+		}
 
 		if (res.ok || res.status === 204) {
-			addLog(tokenId, 'success', `Đã nhận quest ẩn ${quest?.name ?? questId}`);
-			return { success: true, message: `Đã nhận ${quest?.name ?? questId}` };
+			const via = viaProxy && proxy ? ` qua ${proxy.label}` : '';
+			addLog(tokenId, 'success', `Đã nhận quest ẩn ${quest?.name ?? questId}${via}`);
+			return { success: true, message: `Đã nhận ${quest?.name ?? questId}${via}` };
 		}
 
 		// Mã lỗi Discord khi nhận quest, dịch sang câu dễ hiểu.

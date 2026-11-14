@@ -15,3 +15,4 @@ logs/
 .quest-bot-dead
 .quest-running
 .quest-catalog.json
+.quest-proxies.json

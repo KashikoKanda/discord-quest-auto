@@ -152,15 +152,15 @@ Want to skip the prompt? Add a repository secret named `DISCORD_TOKEN`.
 
 ## Commands
 
-| Command               | What it does                                         |
-| :-------------------- | :--------------------------------------------------- |
-| `npm start`           | Run every available quest, then exit                 |
-| `npm run list`        | List quests with progress                            |
-| `npm run hidden`      | Show hidden quests and enrol one by id               |
-| `npm run claim`       | Claim rewards for quests that already finished       |
-| `npm run auto`        | Run as a background loop, rescanning every 5 minutes |
-| `npm run status`      | Show the background loop and live Discord progress   |
-| `npx tsx bot.ts stop` | Stop a running `run` or `auto`                       |
+| Command               | What it does                                           |
+| :-------------------- | :----------------------------------------------------- |
+| `npm start`           | Run every available quest, then exit                   |
+| `npm run list`        | List quests with progress                              |
+| `npm run hidden`      | Every quest in the public catalogue your account lacks |
+| `npm run claim`       | Claim rewards for quests that already finished         |
+| `npm run auto`        | Run as a background loop, rescanning every 5 minutes   |
+| `npm run status`      | Show the background loop and live Discord progress     |
+| `npx tsx bot.ts stop` | Stop a running `run` or `auto`                         |
 
 ### Flags
 
@@ -312,6 +312,33 @@ queue, still with `gap` seconds between starts in the Actions workflow.
 | Video quest stalls halfway                       | Gateway session dropped, run again                               |
 | `EACCES` creating `logs/`                        | Run from the project folder, or pass `--log=` somewhere writable |
 | Odd symbols instead of colours                   | Old console; `--no-color` or `NO_COLOR=1`                        |
+
+## Hidden quests
+
+`npm run hidden` reads the public quest catalogue at discordquest.com, diffs it
+against `/quests/@me` and lists every quest the linked account does not have yet,
+with the region it is tied to. Nothing is filtered by region, so the list is the
+full picture; Discord decides at enrolment time whether the account may join.
+
+Regions matter when you enrol. Point `PROXY_LIST_URL` at a raw GitHub file and the
+API request for a region-locked quest goes through a matching proxy:
+
+```bash
+PROXY_LIST_URL=https://raw.githubusercontent.com/<you>/<repo>/main/proxies.txt
+```
+
+Each line is one proxy, optionally tagged with a country:
+
+```
+host:port
+host:port:user:pass#DE
+user:pass@host:port#JP
+socks5://user:pass@host:port#TH
+```
+
+Editing that file on GitHub is enough: the list is reloaded every ten minutes
+(`PROXY_REFRESH_MIN`), cached on disk between restarts, and a quest without a
+matching proxy falls back to a direct request so nothing is lost.
 
 ## Development
 
