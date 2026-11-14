@@ -157,6 +157,7 @@ Want to skip the prompt? Add a repository secret named `DISCORD_TOKEN`.
 | `npm start`           | Run every available quest, then exit                   |
 | `npm run list`        | List quests with progress                              |
 | `npm run hidden`      | Every quest in the public catalogue your account lacks |
+| `npm run proxy`       | Show the proxy source, count and per-country split     |
 | `npm run claim`       | Claim rewards for quests that already finished         |
 | `npm run auto`        | Run as a background loop, rescanning every 5 minutes   |
 | `npm run status`      | Show the background loop and live Discord progress     |
@@ -211,6 +212,7 @@ gateway is ready.
 | `/link`        | Opens a private form; paste the account token there                 |
 | `/quests`      | Quest list with type, state and progress bars                       |
 | `/hidden`      | Hidden quests from the public catalogue, with `/hidden enroll:<id>` |
+| `/proxy`       | Proxy list health; `/proxy reload:true` refetches it                |
 | `/run [quest]` | Complete quests, progress streams into the reply                    |
 | `/stop`        | Stop the current run                                                |
 | `/claim`       | Claim rewards for finished quests                                   |

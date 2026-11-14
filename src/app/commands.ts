@@ -43,6 +43,19 @@ export const commandDefs = [
 			},
 		],
 	},
+	{
+		name: 'proxy',
+		description: 'Xem danh sách proxy đang dùng',
+		type: 1,
+		options: [
+			{
+				name: 'reload',
+				description: 'Tải lại danh sách ngay',
+				type: 5,
+				required: false,
+			},
+		],
+	},
 	{ name: 'claim', description: 'Nhận thưởng cho quest đã xong', type: 1 },
 	{ name: 'status', description: 'Trạng thái và log gần nhất', type: 1 },
 	{
@@ -326,6 +339,52 @@ async function handleDeferredCommand(interaction: GatewayInteraction, command: C
 				embeds: [embed('Không tải được danh mục', message.slice(0, 300), 0xed4245)],
 			});
 		}
+		return;
+	}
+
+	if (command === 'proxy') {
+		const reload = Boolean(option(interaction, 'reload'));
+		const { proxyStatus } = await import('../core/proxies');
+		const status = await proxyStatus(reload);
+
+		if (!status.source.url && !status.source.file) {
+			await editOriginal(interaction.token, {
+				embeds: [
+					embed(
+						'Proxy',
+						'Chưa cấu hình nguồn. Đặt `PROXY_LIST_URL` (raw GitHub) hoặc `PROXY_LIST_FILE` trong `.env` rồi khởi động lại bot.',
+						0xfaa61a,
+					),
+				],
+			});
+			return;
+		}
+
+		if (status.count === 0) {
+			await editOriginal(interaction.token, {
+				embeds: [
+					embed(
+						'Proxy · danh sách rỗng',
+						`Nguồn: \`${status.source.url ?? status.source.file}\`\nDanh sách chưa có đầu nào dùng được. Kiểm tra lại nội dung file.`,
+						0xed4245,
+					),
+				],
+			});
+			return;
+		}
+
+		const parts = status.countries.map((item) => `${item.code} ${item.count}`);
+		if (status.untagged > 0) parts.push(`không thẻ ${status.untagged}`);
+		const loaded = status.loadedAt ? `<t:${Math.floor(status.loadedAt / 1000)}:R>` : 'chưa';
+		const lines = [
+			`**${status.count}** đầu · tải ${loaded}`,
+			`Nguồn: \`${status.source.url ?? status.source.file}\``,
+			`Theo nước: ${parts.join(' · ')}`,
+			reload ? 'Đã tải lại danh sách.' : 'Dùng `/proxy reload:true` để tải lại ngay.',
+		];
+		await editOriginal(interaction.token, {
+			embeds: [embed('Proxy', lines.join('\n'), 0x57f287)],
+		});
 		return;
 	}
 

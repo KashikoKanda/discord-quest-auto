@@ -184,3 +184,39 @@ export function resetProxyCache(): void {
 	memory = null;
 	cursor = 0;
 }
+
+export interface ProxyStatus {
+	source: { url?: string; file?: string };
+	count: number;
+	countries: { code: string; count: number }[];
+	untagged: number;
+	/** Lần tải gần nhất, null nếu chưa từng tải. */
+	loadedAt: number | null;
+	/** Nguồn có cấu hình nhưng danh sách rỗng. */
+	empty: boolean;
+}
+
+/** Tóm tắt danh sách proxy để lệnh /proxy hiển thị. */
+export async function proxyStatus(force = false): Promise<ProxyStatus> {
+	const entries = await loadProxies(force).catch(() => []);
+	const source = proxySource();
+	const byCountry = new Map<string, number>();
+	let untagged = 0;
+	for (const entry of entries) {
+		if (!entry.country) {
+			untagged += 1;
+			continue;
+		}
+		byCountry.set(entry.country, (byCountry.get(entry.country) ?? 0) + 1);
+	}
+	return {
+		source,
+		count: entries.length,
+		countries: [...byCountry.entries()]
+			.map(([code, count]) => ({ code, count }))
+			.sort((a, b) => b.count - a.count || a.code.localeCompare(b.code)),
+		untagged,
+		loadedAt: memory?.at ?? null,
+		empty: (Boolean(source.url) || Boolean(source.file)) && entries.length === 0,
+	};
+}

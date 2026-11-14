@@ -29,6 +29,7 @@ Lệnh
   run       làm toàn bộ quest đang có rồi tự nhận thưởng   (mặc định)
   list      liệt kê quest kèm tiến trình
   hidden    xem quest ẩn (có trong danh mục nhưng tài khoản không thấy)
+  proxy     xem danh sách proxy và nguồn tải
   claim     nhận thưởng cho quest đã hoàn thành
   auto      chạy nền, quét lại mỗi 5 phút
   status    trạng thái tiến trình + tiến trình thật từ Discord
@@ -40,6 +41,7 @@ Tuỳ chọn
   --force          bỏ qua kiểm tra server bắt buộc
   --json           (list/hidden) in JSON
   --enroll=<id>    (hidden) nhận một quest ẩn để đưa vào lượt chạy
+  --reload         (proxy) tải lại danh sách ngay
   --country=<cc>   (hidden) mã quốc gia để đối chiếu vùng (mặc định VN)
   --log=<file>     ghi log ra file
   --gap=<giây>     nghỉ tối thiểu giữa hai quest (mặc định 10)
@@ -258,7 +260,7 @@ async function claimCompleted(token: string, tokenId: string): Promise<number> {
 }
 
 async function main(): Promise<void> {
-	const known = ['run', 'list', 'hidden', 'claim', 'auto', 'status', 'stop', 'help'];
+	const known = ['run', 'list', 'hidden', 'proxy', 'claim', 'auto', 'status', 'stop', 'help'];
 	if (!known.includes(command)) {
 		logger.error(`Không có lệnh "${command}".`);
 		logger.blank();
@@ -281,6 +283,29 @@ async function main(): Promise<void> {
 		process.kill(state.pid, 'SIGTERM');
 		clearState();
 		logger.success(`Đã dừng pid ${state.pid}.`);
+		return;
+	}
+
+	if (command === 'proxy') {
+		const { proxyStatus, proxySource } = await import('./src/core/proxies');
+		const status = await proxyStatus(has('reload'));
+		const source = proxySource();
+
+		logger.header('Proxy', `${status.count} đầu`);
+		if (!source.url && !source.file) {
+			logger.info('Chưa cấu hình nguồn. Đặt PROXY_LIST_URL (raw GitHub) hoặc PROXY_LIST_FILE trong .env.');
+			return;
+		}
+		logger.plain(`  nguồn   ${source.url ?? source.file}`);
+		logger.plain(`  tải lúc ${status.loadedAt ? new Date(status.loadedAt).toLocaleString() : 'chưa'}`);
+		if (status.count === 0) {
+			logger.warn('Danh sách rỗng. Kiểm tra lại URL hoặc định dạng từng dòng.');
+			return;
+		}
+		const parts = status.countries.map((item) => `${item.code} ${item.count}`);
+		if (status.untagged > 0) parts.push(`không thẻ ${status.untagged}`);
+		logger.plain(`  quốc gia ${parts.join(' · ')}`);
+		logger.info('Tải lại ngay: npm start proxy --reload');
 		return;
 	}
 
