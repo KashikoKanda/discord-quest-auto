@@ -27,6 +27,7 @@ interface GatewayState {
 
 // Global map: tokenId → GatewayState
 const gatewayStates = new Map<string, GatewayState>();
+const connecting = new Map<string, Promise<boolean>>();
 
 // Updated to match aiko-chan-ai latest constants
 function createFingerprint(): GatewayState['fingerprint'] {
@@ -129,6 +130,18 @@ export async function connectGateway(tokenId: string, token: string): Promise<bo
 		return true;
 	}
 
+	// Một lần kết nối đang chờ: hai Identify song song khiến Discord đóng session
+	// đầu bằng 4005 "Already authenticated", và session bị đóng không còn nhận
+	// heartbeat nên quest video đứng im. Dùng chung promise đang chờ.
+	const pending = connecting.get(tokenId);
+	if (pending) return pending;
+
+	const attempt = openGateway(tokenId, token, state).finally(() => connecting.delete(tokenId));
+	connecting.set(tokenId, attempt);
+	return attempt;
+}
+
+function openGateway(tokenId: string, token: string, state: ReturnType<typeof getOrCreateState>): Promise<boolean> {
 	return new Promise((resolve) => {
 		try {
 			const url = state.resumeUrl || GATEWAY_URL;

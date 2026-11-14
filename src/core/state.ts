@@ -62,8 +62,11 @@ export function isResponseCompleted(data: any): boolean {
 export function addLog(tokenId: string, level: string, message: string): void {
 	const state = getGlobalState().get(tokenId);
 	if (state) {
-		state.logs.unshift({ level, message, timestamp: Date.now() });
-		if (state.logs.length > 200) state.logs.length = 200;
+		// Ghi vào cuối (cũ → mới). tail() và /run đều đọc theo chỉ số tăng dần;
+		// unshift trước đây làm mỗi lần thêm log xô lệch chỉ số khiến tin nhắn /run
+		// in lại các dòng cũ và không bao giờ tới được dòng mới.
+		state.logs.push({ level, message, timestamp: Date.now() });
+		if (state.logs.length > 200) state.logs.splice(0, state.logs.length - 200);
 	}
 }
 

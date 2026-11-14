@@ -236,7 +236,8 @@ export const QuestWorker = {
 		// Connect to Discord Gateway first (required for heartbeat/video-progress APIs)
 		const gatewayConnect = connectGateway(tokenId, state.token).then((ok) => {
 			if (ok) {
-				addLog(tokenId, 'success', 'Đã kết nối Discord Gateway!');
+				// Chỉ báo ở đây cho đường chạy 1 quest; processAllQuests tự báo.
+				if (questId) addLog(tokenId, 'success', 'Đã kết nối Discord Gateway!');
 			} else {
 				addLog(tokenId, 'warn', 'Không kết nối được Gateway, tiếp tục không có gateway session...');
 			}
