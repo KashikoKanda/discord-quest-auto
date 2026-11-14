@@ -7,7 +7,7 @@ import type { Command, QuestShape } from './src/core/interface';
 loadEnv();
 
 const argv = process.argv.slice(2);
-const command = (argv[0] ?? 'run').toLowerCase() as Command;
+const command = (argv.find((arg) => !arg.startsWith('--')) ?? 'run').toLowerCase() as Command;
 
 function flag(name: string): string | undefined {
 	const hit = argv.find((arg) => arg.startsWith(`--${name}=`));
@@ -46,7 +46,38 @@ Tuỳ chọn
 Môi trường: Linux, macOS, Windows (cmd/PowerShell), Termux. Cần Node 20+.
 Gõ: npm start | npm run list | npm run claim | npm run auto`;
 
-/** Đọc token từ bàn phím: che ký tự khi có TTY, đọc dòng đầu khi bị pipe. */
+/** Bàn phím dùng chung cho các câu hỏi: giữ lại ký tự gõ dư giữa hai lần hỏi. */
+const keys: string[] = [];
+let keysOn = false;
+
+function keysStart(): void {
+	if (keysOn) return;
+	keysOn = true;
+	const stdin = process.stdin;
+	stdin.setRawMode?.(true);
+	stdin.resume();
+	stdin.setEncoding('utf8');
+	stdin.on('data', (chunk: string) => {
+		for (const ch of chunk) keys.push(ch);
+	});
+}
+
+function keysStop(): void {
+	if (!keysOn) return;
+	keysOn = false;
+	process.stdin.setRawMode?.(false);
+	process.stdin.pause();
+}
+
+async function nextKey(): Promise<string> {
+	for (;;) {
+		const hit = keys.shift();
+		if (hit !== undefined) return hit;
+		await new Promise((resolve) => setTimeout(resolve, 8));
+	}
+}
+
+/** Đọc token: che ký tự khi có TTY, đọc dòng đầu khi bị pipe. */
 async function askToken(): Promise<string | null> {
 	const stdin = process.stdin;
 
@@ -65,70 +96,59 @@ async function askToken(): Promise<string | null> {
 	}
 
 	process.stdout.write(`${logger.color.cyan}?${logger.color.reset} Dán token Discord: `);
-	stdin.setRawMode?.(true);
-	stdin.resume();
-	stdin.setEncoding('utf8');
+	keysStart();
 
-	return new Promise((resolve) => {
-		let value = '';
-		const finish = (result: string | null) => {
-			stdin.off('data', onData);
-			stdin.setRawMode?.(false);
-			stdin.pause();
+	let value = '';
+	for (;;) {
+		const ch = await nextKey();
+		if (ch === '\r' || ch === '\n') break;
+		if (ch === '\u0003') {
+			keysStop();
 			process.stdout.write('\n');
-			resolve(result);
-		};
-		const onData = (chunk: string) => {
-			for (const ch of chunk) {
-				if (ch === '\r' || ch === '\n') return finish(value.trim() || null);
-				if (ch === '\u0003') {
-					process.stdout.write('\n');
-					process.exit(130);
-				}
-				if (ch === '\u007f' || ch === '\b') {
-					if (value) {
-						value = value.slice(0, -1);
-						process.stdout.write('\b \b');
-					}
-					continue;
-				}
-				if (ch >= ' ') {
-					value += ch;
-					process.stdout.write('*');
-				}
+			process.exit(130);
+		}
+		if (ch === '\u007f' || ch === '\b') {
+			if (value) {
+				value = value.slice(0, -1);
+				process.stdout.write('\b \b');
 			}
-		};
-		stdin.on('data', onData);
-	});
+			continue;
+		}
+		if (ch >= ' ') {
+			value += ch;
+			process.stdout.write('*');
+		}
+	}
+
+	keysStop();
+	process.stdout.write('\n');
+	return value.trim() || null;
 }
 
 /** Hỏi có/không bằng một phím. */
 async function confirm(question: string, fallback = true): Promise<boolean> {
-	const stdin = process.stdin;
-	if (!stdin.isTTY) return false;
+	if (!process.stdin.isTTY) return false;
 
 	process.stdout.write(`${logger.color.cyan}?${logger.color.reset} ${question} ${fallback ? '(Y/n)' : '(y/N)'} `);
-	stdin.setRawMode?.(true);
-	stdin.resume();
-	stdin.setEncoding('utf8');
+	keysStart();
 
-	return new Promise((resolve) => {
-		const finish = (answer: boolean) => {
-			stdin.off('data', onData);
-			stdin.setRawMode?.(false);
-			stdin.pause();
-			process.stdout.write(`${answer ? 'có' : 'không'}\n`);
-			resolve(answer);
-		};
-		const onData = (chunk: string) => {
-			const ch = chunk.toLowerCase();
-			if (ch === '\u0003') process.exit(130);
-			if (ch.includes('y')) return finish(true);
-			if (ch.includes('n')) return finish(false);
-			if (ch === '\r' || ch === '\n') return finish(fallback);
-		};
-		stdin.on('data', onData);
-	});
+	for (;;) {
+		const ch = (await nextKey()).toLowerCase();
+		if (ch === '\u0003') {
+			keysStop();
+			process.exit(130);
+		}
+		if (ch === 'y' || ch === 'n') {
+			keysStop();
+			process.stdout.write(`${ch === 'y' ? 'có' : 'không'}\n`);
+			return ch === 'y';
+		}
+		if (ch === '\r' || ch === '\n') {
+			keysStop();
+			process.stdout.write(`${fallback ? 'có' : 'không'}\n`);
+			return fallback;
+		}
+	}
 }
 
 /** Ghi token vào .env để lần sau khỏi dán. */
@@ -235,6 +255,14 @@ async function claimCompleted(token: string, tokenId: string): Promise<number> {
 }
 
 async function main(): Promise<void> {
+	const known = ['run', 'list', 'claim', 'auto', 'status', 'stop', 'help'];
+	if (!known.includes(command)) {
+		logger.error(`Không có lệnh "${command}".`);
+		logger.blank();
+		logger.plain(HELP);
+		process.exit(1);
+	}
+
 	if (command === 'help' || has('help')) {
 		logger.plain(HELP);
 		return;

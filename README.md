@@ -58,6 +58,15 @@ TOKEN=your_account_token
 
 Then `npm start`. Quests run one after another, and the tool stops when nothing is left.
 
+Already have the token in a variable? Pipe it in and skip the prompt:
+
+```bash
+echo "$TOKEN" | npm start
+```
+
+Habits worth keeping: `npm run list` before a run, `npm run claim` after one, and
+`npx tsx bot.ts stop` when a background loop needs to go.
+
 > The token is a **user** token, not a bot token. `npm start` prints an invite link if
 > the account is not in the server that Discord requires for rewards.
 

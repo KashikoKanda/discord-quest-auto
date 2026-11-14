@@ -1,7 +1,7 @@
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
-const ANSI_ON = !process.env.NO_COLOR && !process.argv.includes('--no-color') && process.stdout.isTTY !== false;
+const ANSI_ON = Boolean(process.stdout.isTTY) && !process.env.NO_COLOR && !process.argv.includes('--no-color');
 
 const COLOR = {
 	reset: ANSI_ON ? '\u001b[0m' : '',
