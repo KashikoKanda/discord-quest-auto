@@ -1,14 +1,14 @@
 name: Quests
 
-# Bấm Run workflow, dán token tài khoản, chọn việc cần làm:
-#   mode=all     làm mọi quest còn thiếu, lần lượt từng cái
-#   mode=single  chỉ làm đúng quest id đã dán
+# Bấm Run workflow, dán token tài khoản, gạt công tắc:
+#   multi BẬT   làm mọi quest còn thiếu, lần lượt từng cái
+#   multi TẮT   chỉ làm đúng quest id đã dán
 #
-# Quest chạy tuần tự, giữa hai quest nghỉ ít nhất `gap` giây, và mỗi request vẫn
-# qua hàng đợi của engine nên không dội API Discord.
+# Quest luôn chạy tuần tự, giữa hai quest nghỉ ít nhất `gap` giây, và mỗi request
+# vẫn qua hàng đợi của engine nên không dội API Discord.
 #
-# Workflow này KHÔNG tự nhận thưởng khi quest xong. Muốn nhận thưởng thì bật
-# claim_only, hoặc chạy `bot.ts claim` trên máy.
+# Workflow này CHỈ làm quest, không nhận thưởng. Muốn nhận thưởng thì chạy
+# `bot.ts claim` trên máy.
 #
 # Token được che (***) trước khi mọi thứ khác chạy và không ghi xuống đĩa.
 
@@ -19,16 +19,13 @@ on:
         description: Token tài khoản Discord (sẽ được che trong log)
         required: true
         type: string
-      mode:
-        description: Làm quest nào
-        required: true
-        type: choice
-        default: all
-        options:
-          - all
-          - single
+      multi:
+        description: Bật để làm tất cả quest, tắt để làm một quest
+        required: false
+        default: true
+        type: boolean
       quest_id:
-        description: Id quest (chỉ dùng khi mode=single)
+        description: Id quest, chỉ dùng khi công tắc multi đang tắt
         required: false
         type: string
       gap:
@@ -36,11 +33,6 @@ on:
         required: false
         default: '10'
         type: string
-      claim_only:
-        description: Chỉ nhận thưởng cho quest đã xong, không làm quest
-        required: false
-        default: false
-        type: boolean
 
 permissions:
   contents: read
@@ -92,8 +84,8 @@ jobs:
       - name: Kiểm tra ô nhập
         run: |
           set -euo pipefail
-          if [ "${{ inputs.mode }}" = "single" ] && [ -z "${{ inputs.quest_id }}" ]; then
-            echo "::error::mode=single cần quest_id. Chạy bot.ts list để xem id."
+          if [ "${{ inputs.multi }}" != "true" ] && [ -z "${{ inputs.quest_id }}" ]; then
+            echo "::error::Đang tắt multi thì phải nhập quest_id. Chạy bot.ts list để xem id."
             exit 1
           fi
           case "${{ inputs.gap }}" in
@@ -106,14 +98,12 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p logs
-          if [ "${{ inputs.claim_only }}" = "true" ]; then
-            echo "chế độ nhận thưởng: bot.ts claim"
-            npx tsx bot.ts claim 2>&1 | tee logs/quest.log
-            exit 0
-          fi
           FLAGS="--gap=${{ inputs.gap }}"
-          if [ "${{ inputs.mode }}" = "single" ]; then
+          if [ "${{ inputs.multi }}" = "true" ]; then
+            echo "chế độ: tất cả quest"
+          else
             FLAGS="$FLAGS --quest=${{ inputs.quest_id }}"
+            echo "chế độ: một quest ${{ inputs.quest_id }}"
           fi
           echo "chạy: bot.ts run $FLAGS"
           npx tsx bot.ts run --log=logs/quest.log $FLAGS 2>&1 | tee -a logs/quest.log

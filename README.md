@@ -40,15 +40,14 @@ làm artifact. Token được che (`***`) trước khi bot khởi động và kh
 
 Các ô khi bấm Run:
 
-| Ô nhập       | Chọn gì                                                   | Tương đương    |
-| :----------- | :-------------------------------------------------------- | :------------- |
-| `mode`       | `all` làm mọi quest còn thiếu, `single` chỉ làm một quest | `--quest=<id>` |
-| `quest_id`   | id quest, bắt buộc khi `mode=single`                      | `--quest=<id>` |
-| `gap`        | số giây nghỉ tối thiểu giữa hai quest, mặc định 10        | `--gap=<giây>` |
-| `claim_only` | chỉ nhận thưởng, không làm quest                          | `bot.ts claim` |
+| Ô nhập     | Chọn gì                                                     | Tương đương    |
+| :--------- | :---------------------------------------------------------- | :------------- |
+| `multi`    | **bật** làm mọi quest còn thiếu, **tắt** chỉ làm `quest_id` | `--quest=<id>` |
+| `quest_id` | id quest, bắt buộc khi công tắc `multi` tắt                 | `--quest=<id>` |
+| `gap`      | số giây nghỉ tối thiểu giữa hai quest, mặc định 10          | `--gap=<giây>` |
 
-Workflow **không tự nhận thưởng** khi quest xong: quest hoàn thành là dừng. Muốn lấy
-thưởng thì bật `claim_only`, hoặc chạy `npm run claim` trên máy.
+Workflow **chỉ làm quest, không nhận thưởng**. Quest xong là dừng; muốn lấy thưởng
+thì chạy `npm run claim` trên máy.
 
 Quest luôn chạy **lần lượt**, mỗi quest cách nhau ít nhất `gap` giây (cộng thêm 0–5 giây
 ngẫu nhiên), và từng request vẫn qua hàng đợi của engine nên không spam Discord.
