@@ -1,0 +1,13 @@
+node_modules/
+.env
+.env.*
+!.env.example
+logs/
+*.log
+
+# dữ liệu cục bộ: fingerprint + pid
+.quest-store.json
+.quest-state.json
+.quest-store.json.tmp
+
+.DS_Store

@@ -1,0 +1,112 @@
+name: Quests
+
+# Press Run workflow and paste the account token into the prompt. Nothing else
+# is needed: no secret, no .env, no local install.
+#
+# The token is masked in the log before anything else runs, and it is never
+# written to disk. If you would rather not paste it each time, add a repository
+# secret named DISCORD_TOKEN and leave the prompt empty.
+
+on:
+  workflow_dispatch:
+    inputs:
+      token:
+        description: Discord account token (masked in the log)
+        required: true
+        type: string
+      quest:
+        description: Quest id to run (leave empty for every quest)
+        required: false
+        type: string
+      multi:
+        description: Run quests in parallel instead of one by one
+        required: false
+        default: false
+        type: boolean
+      claim_only:
+        description: Only claim rewards for quests that already finished
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quests-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  run:
+    name: Run quests
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Fingerprint is one small JSON file. A fresh cache key each run keeps the
+      # entry immutable; restore-keys always finds the newest one, so the account
+      # keeps the same device identity between runs.
+      - name: Restore fingerprint
+        uses: actions/cache/restore@v4
+        with:
+          path: .quest-store.json
+          key: quest-store-${{ github.run_id }}
+          restore-keys: |
+            quest-store-
+
+      - name: Mask token
+        env:
+          TOKEN: ${{ inputs.token || secrets.DISCORD_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::error::No token. Paste one into the Run workflow prompt, or add a DISCORD_TOKEN secret."
+            exit 1
+          fi
+          echo "::add-mask::$TOKEN"
+
+      - name: Run
+        env:
+          TOKEN: ${{ inputs.token || secrets.DISCORD_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p logs
+          if [ "${{ inputs.claim_only }}" = "true" ]; then
+            npx tsx bot.ts claim 2>&1 | tee logs/quest.log
+            exit 0
+          fi
+          FLAGS=""
+          if [ -n "${{ inputs.quest }}" ]; then FLAGS="$FLAGS --quest=${{ inputs.quest }}"; fi
+          if [ "${{ inputs.multi }}" = "true" ]; then FLAGS="$FLAGS --multi"; fi
+          npx tsx bot.ts run --log=logs/quest.log $FLAGS 2>&1 | tee -a logs/quest.log
+
+      - name: Show log
+        if: always()
+        run: cat logs/quest.log 2>/dev/null || echo "no log produced"
+
+      - name: Save fingerprint
+        if: always() && hashFiles('.quest-store.json') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: .quest-store.json
+          key: quest-store-${{ github.run_id }}
+
+      - name: Upload log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quest-log-${{ github.run_id }}
+          path: logs/
+          if-no-files-found: ignore
+          retention-days: 7
