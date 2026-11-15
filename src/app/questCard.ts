@@ -177,9 +177,9 @@ export async function renderQuestGrid(
 	return { png, width, height, drawn: cells.filter(Boolean).length };
 }
 
-const CARD_MAX_W = 900;
-const CARD_MAX_H = 900;
-const CARD_MIN_H = 420;
+const CARD_MAX_W = 720;
+const CARD_MAX_H = 720;
+const CARD_MIN_H = 330;
 
 /** Một quest thành một tấm ảnh riêng, giữ nguyên khung hình gốc của ảnh bìa. */
 export async function renderQuestCard(
@@ -209,6 +209,21 @@ export async function renderQuestCard(
 				.png()
 				.toBuffer();
 
+	// Cỡ chữ co theo bề rộng để ảnh nhỏ vẫn cân đối.
+	const padX = Math.round(width * 0.045);
+	const nameFont = Math.round(width * 0.042);
+	const metaFont = Math.round(width * 0.024);
+	const noteFont = Math.round(width * 0.019);
+	const badgeFont = Math.round(width * 0.023);
+	const badgeW = Math.round(width * 0.12);
+	const badgeH = Math.round(badgeFont * 1.9);
+	const badgeX = width - badgeW - Math.round(width * 0.028);
+	const badgeY = Math.round(width * 0.028);
+	// Xếp chữ từ dưới lên, mỗi dòng cần chỗ cho cỡ chữ của chính nó.
+	const noteGap = Math.round(noteFont * 0.9);
+	const metaGap = noteGap + Math.round(metaFont * 1.5);
+	const nameGap = metaGap + Math.round(nameFont * 1.15);
+
 	const name = escapeXml(clip(quest.name, 44));
 	const metaText = escapeXml(clip(metaLine(quest), 60));
 	const note = options.note ? escapeXml(clip(options.note, 54)) : '';
@@ -223,11 +238,11 @@ export async function renderQuestCard(
 		</linearGradient>
 	</defs>
 	<rect width="${width}" height="${height}" fill="url(#shade)"/>
-	<rect x="${width - 128}" y="20" width="104" height="40" rx="20" fill="#000000" fill-opacity="0.55"/>
-	<text x="${width - 76}" y="47" text-anchor="middle" font-family="DejaVu Sans, Noto Sans, Noto Sans Thai, Noto Sans CJK JP, sans-serif" font-size="20" fill="#ffffff">${badge}</text>
-	<text x="36" y="${height - 70}" font-family="DejaVu Sans, Noto Sans, Noto Sans Thai, Noto Sans CJK JP, sans-serif" font-size="36" font-weight="bold" fill="#ffffff">${name}</text>
-	<text x="36" y="${height - 34}" font-family="DejaVu Sans, Noto Sans, Noto Sans Thai, Noto Sans CJK JP, sans-serif" font-size="21" fill="#d5d8e0">${metaText}</text>
-	${note ? `<text x="36" y="${height - 10}" font-family="DejaVu Sans, Noto Sans, Noto Sans Thai, Noto Sans CJK JP, sans-serif" font-size="17" fill="#9aa0ad">${note}</text>` : ''}
+	<rect x="${badgeX}" y="${badgeY}" width="${badgeW}" height="${badgeH}" rx="${badgeH / 2}" fill="#000000" fill-opacity="0.55"/>
+	<text x="${badgeX + badgeW / 2}" y="${badgeY + badgeH * 0.68}" text-anchor="middle" font-family="DejaVu Sans, Noto Sans, Noto Sans Thai, Noto Sans CJK JP, sans-serif" font-size="${badgeFont}" fill="#ffffff">${badge}</text>
+	<text x="${padX}" y="${height - nameGap}" font-family="DejaVu Sans, Noto Sans, Noto Sans Thai, Noto Sans CJK JP, sans-serif" font-size="${nameFont}" font-weight="bold" fill="#ffffff">${name}</text>
+	<text x="${padX}" y="${height - metaGap}" font-family="DejaVu Sans, Noto Sans, Noto Sans Thai, Noto Sans CJK JP, sans-serif" font-size="${metaFont}" fill="#d5d8e0">${metaText}</text>
+	${note ? `<text x="${padX}" y="${height - noteGap}" font-family="DejaVu Sans, Noto Sans, Noto Sans Thai, Noto Sans CJK JP, sans-serif" font-size="${noteFont}" fill="#9aa0ad">${note}</text>` : ''}
 </svg>`);
 
 	return sharp(base)
