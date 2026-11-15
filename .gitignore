@@ -16,3 +16,4 @@ logs/
 .quest-running
 .quest-catalog.json
 .quest-proxies.json
+hidden-*.png

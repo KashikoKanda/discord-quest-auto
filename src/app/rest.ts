@@ -79,6 +79,24 @@ export async function editOriginal(
 	return (await res.json().catch(() => null)) as Record<string, unknown> | null;
 }
 
+/** Cập nhật tin nhắn gốc kèm một file đính kèm (multipart). */
+export async function editOriginalWithFile(
+	interactionToken: string,
+	body: Record<string, unknown>,
+	file: { name: string; data: Buffer; type?: string },
+): Promise<Record<string, unknown> | null> {
+	const form = new FormData();
+	form.append('payload_json', JSON.stringify(body));
+	form.append('files[0]', new Blob([new Uint8Array(file.data)], { type: file.type ?? 'image/png' }), file.name);
+
+	const res = await fetch(`${API}/webhooks/${botId}/${interactionToken}/messages/@original`, {
+		method: 'PATCH',
+		body: form,
+	});
+	if (!res.ok) return null;
+	return (await res.json().catch(() => null)) as Record<string, unknown> | null;
+}
+
 export async function followUp(interactionToken: string, body: Record<string, unknown>): Promise<void> {
 	const res = await fetch(`${API}/webhooks/${botId}/${interactionToken}`, {
 		method: 'POST',

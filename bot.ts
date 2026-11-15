@@ -42,6 +42,7 @@ Tuỳ chọn
   --json           (list/hidden) in JSON
   --enroll=<id>    (hidden) nhận một quest ẩn để đưa vào lượt chạy
   --reload         (proxy) tải lại danh sách ngay
+  --image[=tệp]    (hidden) xuất ảnh lưới quest ẩn ra tệp PNG
   --country=<cc>   (hidden) mã quốc gia để đối chiếu vùng (mặc định VN)
   --log=<file>     ghi log ra file
   --gap=<giây>     nghỉ tối thiểu giữa hai quest (mặc định 10)
@@ -419,6 +420,27 @@ async function main(): Promise<void> {
 			);
 		}
 		if (list.length > 40) logger.info(`… và ${list.length - 40} quest khác.`);
+
+		if (has('image') || flag('image')) {
+			const { renderQuestGrid } = await import('./src/app/questCard');
+			const { writeFileSync } = await import('node:fs');
+			const target = flag('image') ?? `hidden-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.png`;
+			const grid = await renderQuestGrid(
+				list.map((quest) => ({
+					id: quest.id,
+					name: quest.name,
+					minutes: quest.minutes,
+					type: quest.type,
+					tag: quest.region?.isGlobal
+						? 'toàn cầu'
+						: (quest.region?.include ?? []).slice(0, 2).join('/') || 'chưa rõ',
+					hero: quest.hero,
+				})),
+				{ title: `Quest ẩn · ${list.length} quest`, columns: 3, max: 9 },
+			);
+			writeFileSync(target, grid.png);
+			logger.success(`Đã lưu ảnh ${grid.width}×${grid.height}: ${target}`);
+		}
 
 		const { loadProxies, proxySource } = await import('./src/core/proxies');
 		const proxies = await loadProxies().catch(() => []);

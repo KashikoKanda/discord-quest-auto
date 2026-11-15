@@ -4,7 +4,7 @@ import { Quest } from '../quests/quest';
 import { tokenIdFor } from '../core/config';
 import { logger } from '../core/logger';
 import type { CommandName, GatewayInteraction } from './interface';
-import { editOriginal, EPHEMERAL, replyInteraction } from './rest';
+import { editOriginal, editOriginalWithFile, EPHEMERAL, followUp, replyInteraction } from './rest';
 import { getAccount, linkAccount, setAuto, unlinkAccount } from './store';
 
 export const commandDefs = [
@@ -318,21 +318,57 @@ async function handleDeferredCommand(interaction: GatewayInteraction, command: C
 					? 'Nguồn proxy có cấu hình nhưng danh sách rỗng.'
 					: 'Chưa cấu hình proxy (PROXY_LIST_URL).';
 
-			const lines = list.slice(0, 15).map((quest) => {
-				const tag = quest.region?.isGlobal && quest.region.include.length === 0 ? 'toàn cầu' : quest.reason;
-				return `▸ **${quest.name}** · ${quest.minutes}m · \`${quest.type}\`\n\u2003${tag} · \`${quest.id}\``;
-			});
-			const more = list.length > 15 ? `\n… và ${list.length - 15} quest khác` : '';
-			const hint = `\n\nNhận quest: \`/hidden enroll:<id>\`\n${proxyNote}`;
-			await editOriginal(interaction.token, {
+			// Ảnh lưới cho phần nhìn, embed chỉ còn số liệu và hướng dẫn.
+			const { renderQuestGrid } = await import('./questCard');
+			const grid = await renderQuestGrid(
+				list.map((quest) => ({
+					id: quest.id,
+					name: quest.name,
+					minutes: quest.minutes,
+					type: quest.type,
+					tag:
+						quest.region?.isGlobal && quest.region.include.length === 0
+							? 'toàn cầu'
+							: (quest.region?.include ?? []).slice(0, 2).join('/') || 'chưa rõ',
+					hero: quest.hero,
+				})),
+				{ title: `Quest ẩn · ${list.length} quest`, columns: 3, max: 9 },
+			).catch(() => null);
+
+			const hint = `Nhận quest: \`/hidden enroll:<id>\`\nXem mã quest trong tin nhắn riêng bên dưới.\n${proxyNote}`;
+			const body = `**${list.length}** quest trong danh mục mà tài khoản chưa có${
+				list.length > 9 ? ` · ảnh hiện 9 quest ngắn nhất` : ''
+			}\n\n${hint}`;
+			const embedBase = embed(`Quest ẩn`, body, 0x5865f2);
+
+			if (grid) {
+				await editOriginalWithFile(
+					interaction.token,
+					{
+						embeds: [{ ...embedBase, image: { url: 'attachment://quest-hidden.png' } }],
+						attachments: [{ id: 0, filename: 'quest-hidden.png', description: 'Ảnh bìa quest ẩn' }],
+					},
+					{ name: 'quest-hidden.png', data: grid.png },
+				);
+			} else {
+				await editOriginal(interaction.token, { embeds: [embedBase] });
+			}
+
+			// Danh sách ID vẫn cần để gõ /hidden enroll, gửi kèm dạng chữ.
+			const ids = list
+				.slice(0, 12)
+				.map((quest) => `${quest.name} · \`${quest.id}\``)
+				.join('\n');
+			await followUp(interaction.token, {
 				embeds: [
 					embed(
-						`Quest ẩn · ${list.length} quest tài khoản chưa có`,
-						`${lines.join('\n')}${more}${hint}`,
-						0x5865f2,
+						'ID để nhận quest',
+						`${ids}${list.length > 12 ? `\n… và ${list.length - 12} quest khác, dùng \`npm run hidden\` để xem hết` : ''}`,
+						0x2b2d31,
 					),
 				],
-			});
+				flags: EPHEMERAL,
+			}).catch(() => null);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			await editOriginal(interaction.token, {
