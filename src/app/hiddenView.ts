@@ -78,7 +78,7 @@ function pickMenu(quests: HiddenQuest[], index: number): Record<string, unknown>
 	};
 }
 
-function buttons(index: number, total: number, note?: string): Record<string, unknown>[] {
+function buttons(questId: string, index: number, total: number, note?: string): Record<string, unknown>[] {
 	return [
 		{
 			type: 1,
@@ -106,6 +106,13 @@ function buttons(index: number, total: number, note?: string): Record<string, un
 					custom_id: `hv|next|${index}`,
 					disabled: index >= total - 1,
 				},
+				{
+					// Nút link: mở đúng quest trong app Discord.
+					type: 2,
+					style: 5,
+					label: 'Mở quest',
+					url: `https://discord.com/quests/${questId}`,
+				},
 			],
 		},
 	];
@@ -131,10 +138,12 @@ export async function hiddenPageBody(
 		{ index, total: quests.length, note: `${quest.game} · ${quest.reason}` },
 	);
 
+	const link = `https://discord.com/quests/${quest.id}`;
 	const embed: Record<string, unknown> = {
 		color: 0x5865f2,
 		title: quest.name.slice(0, 240),
-		description: `\`${quest.type}\` · ${fields.meta}\n\`${quest.id}\``,
+		url: link,
+		description: `[\`${quest.type}\` · ${fields.meta}](${link})\n[\`${quest.id}\`](${link})`,
 		image: { url: 'attachment://quest-hidden.png' },
 		footer: { text: `Quest ẩn ${index + 1}/${quests.length}${note ? ` · ${note}` : ''}` },
 		timestamp: new Date().toISOString(),
@@ -142,7 +151,7 @@ export async function hiddenPageBody(
 
 	return {
 		embeds: [embed],
-		components: [pickMenu(quests, index), ...buttons(index, quests.length, note)],
+		components: [pickMenu(quests, index), ...buttons(quest.id, index, quests.length, note)],
 		attachments: [{ id: 0, filename: 'quest-hidden.png', description: quest.name.slice(0, 100) }],
 		file: png,
 	};

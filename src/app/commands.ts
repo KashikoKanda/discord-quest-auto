@@ -326,7 +326,7 @@ async function handleDeferredCommand(interaction: GatewayInteraction, command: C
 
 			const ids = list
 				.slice(0, 12)
-				.map((quest) => `${quest.name} · \`${quest.id}\``)
+				.map((quest) => `${quest.name} · [${quest.id}](https://discord.com/quests/${quest.id})`)
 				.join('\n');
 			await followUp(interaction.token, {
 				embeds: [

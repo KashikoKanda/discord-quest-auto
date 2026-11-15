@@ -416,7 +416,7 @@ async function main(): Promise<void> {
 		for (const quest of list.slice(0, 40)) {
 			const tag = quest.region?.isGlobal && quest.region.include.length === 0 ? 'toàn cầu' : quest.reason;
 			logger.plain(
-				`  ${String(quest.minutes).padStart(3)}m  ${quest.type.padEnd(22)} ${quest.name.slice(0, 34).padEnd(34)} ${tag}  ${quest.id}`,
+				`  ${String(quest.minutes).padStart(3)}m  ${quest.type.padEnd(22)} ${quest.name.slice(0, 34).padEnd(34)} ${tag}  https://discord.com/quests/${quest.id}`,
 			);
 		}
 		if (list.length > 40) logger.info(`… và ${list.length - 40} quest khác.`);
