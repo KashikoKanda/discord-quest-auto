@@ -16,10 +16,22 @@ import { logger } from '../core/logger';
 const MAX_AGE_MS = 15 * 60 * 1000;
 const sessions = new Map<string, { quests: HiddenQuest[]; at: number }>();
 
+/** Số phiên giữ cùng lúc; quá thì bỏ phiên cũ nhất để bộ nhớ không phình. */
+const MAX_SESSIONS = 500;
+
 export function rememberHidden(userId: string, quests: HiddenQuest[]): void {
-	sessions.set(userId, { quests, at: Date.now() });
+	// Không giữ `raw` (toàn bộ config của quest, vài chục KB mỗi cái): lúc nhận quest
+	// worker đọc lại từ danh mục đã cache, nên bản trong phiên chỉ cần phần hiển thị.
+	const slim = quests.map((quest) => ({ ...quest, raw: {} }));
+	sessions.set(userId, { quests: slim, at: Date.now() });
+
 	for (const [key, value] of sessions) {
 		if (Date.now() - value.at > MAX_AGE_MS) sessions.delete(key);
+	}
+	while (sessions.size > MAX_SESSIONS) {
+		const oldest = [...sessions.entries()].sort((a, b) => a[1].at - b[1].at)[0];
+		if (!oldest) break;
+		sessions.delete(oldest[0]);
 	}
 }
 

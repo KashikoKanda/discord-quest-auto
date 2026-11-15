@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { tokenIdFor } from '../core/config';
 
 export interface LinkedAccount {
@@ -32,7 +32,11 @@ export function readStore(): StoreFile {
 }
 
 function write(store: StoreFile): void {
-	writeFileSync(PATH, JSON.stringify(store, null, 2), { mode: 0o600 });
+	// Ghi ra tệp tạm rồi đổi tên: nhiều người link cùng lúc hoặc process chết giữa
+	// chừng cũng không để lại tệp cụt.
+	const tmp = `${PATH}.tmp`;
+	writeFileSync(tmp, JSON.stringify(store, null, 2), { mode: 0o600 });
+	renameSync(tmp, PATH);
 	try {
 		chmodSync(PATH, 0o600);
 	} catch {
