@@ -40,6 +40,44 @@ function cardFields(quest: HiddenQuest): { meta: string; note: string } {
 	return { meta, note };
 }
 
+const CHUNK = 25;
+
+/** Menu chọn nhanh: 25 quest quanh vị trí đang xem, bấm là nhảy thẳng tới. */
+function pickMenu(quests: HiddenQuest[], index: number): Record<string, unknown> {
+	const chunk = Math.floor(index / CHUNK);
+	const from = chunk * CHUNK;
+	const slice = quests.slice(from, from + CHUNK);
+	const options = slice.map((quest, offset) => {
+		const area =
+			quest.region && quest.region.isGlobal && quest.region.include.length === 0
+				? 'toàn cầu'
+				: (quest.region?.include ?? []).slice(0, 2).join('/') || 'chưa rõ vùng';
+		return {
+			label: `${from + offset + 1}. ${quest.name}`.slice(0, 100),
+			value: String(from + offset),
+			description: `${quest.minutes} phút · ${quest.type.replace(/_/g, ' ').toLowerCase()} · ${area}`.slice(
+				0,
+				100,
+			),
+			default: from + offset === index,
+		};
+	});
+
+	return {
+		type: 1,
+		components: [
+			{
+				type: 3,
+				custom_id: 'hv|pick',
+				placeholder: `Chọn quest (${from + 1}-${from + slice.length} trên ${quests.length})`,
+				min_values: 1,
+				max_values: 1,
+				options,
+			},
+		],
+	};
+}
+
 function buttons(index: number, total: number, note?: string): Record<string, unknown>[] {
 	return [
 		{
@@ -104,7 +142,7 @@ export async function hiddenPageBody(
 
 	return {
 		embeds: [embed],
-		components: buttons(index, quests.length, note),
+		components: [pickMenu(quests, index), ...buttons(index, quests.length, note)],
 		attachments: [{ id: 0, filename: 'quest-hidden.png', description: quest.name.slice(0, 100) }],
 		file: png,
 	};
@@ -140,6 +178,16 @@ export async function handleHiddenButton(interaction: GatewayInteraction): Promi
 	}
 
 	const index = Math.max(0, Math.min(quests.length - 1, Number(rawIndex) || 0));
+
+	if (action === 'pick') {
+		// Menu chọn nhanh gửi giá trị là chỉ số quest.
+		const picked = Number(interaction.data?.values?.[0] ?? 0);
+		const at = Math.max(0, Math.min(quests.length - 1, Number.isFinite(picked) ? picked : 0));
+		await sendHiddenPage(interaction.token, quests, at).catch((error: Error) =>
+			logger.warn(`Không cập nhật được trang quest ẩn: ${error.message}`),
+		);
+		return;
+	}
 
 	if (action === 'prev' || action === 'next') {
 		const next = Math.max(0, Math.min(quests.length - 1, index + (action === 'next' ? 1 : -1)));

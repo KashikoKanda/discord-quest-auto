@@ -21,5 +21,7 @@ export interface GatewayInteraction {
 		custom_id?: string;
 		options?: CommandOption[];
 		components?: Array<{ components: Array<{ custom_id: string; value: string }> }>;
+		/** Giá trị đã chọn trong menu chọn (component type 3). */
+		values?: string[];
 	};
 }
