@@ -178,10 +178,12 @@ export async function renderQuestGrid(
 }
 
 const CARD_MAX_W = 720;
-const CARD_MAX_H = 720;
-const CARD_MIN_H = 330;
+const CARD_MAX_H = 900;
 
-/** Một quest thành một tấm ảnh riêng, giữ nguyên khung hình gốc của ảnh bìa. */
+/**
+ * Một quest thành một tấm ảnh riêng: ảnh bìa để nguyên khung, phần chữ nằm trên
+ * dải nền riêng bên dưới nên không có viền đen hay khoảng trống thừa.
+ */
 export async function renderQuestCard(
 	quest: CardQuest,
 	options: { index: number; total: number; note?: string } = { index: 0, total: 1 },
@@ -193,25 +195,16 @@ export async function renderQuestCard(
 				.catch(() => null)
 		: null;
 
-	const sourceWidth = meta?.width ?? 16;
-	const sourceHeight = meta?.height ?? 9;
-	const ratio = sourceWidth / sourceHeight;
+	const ratio = (meta?.width ?? 16) / (meta?.height ?? 9);
+	let width = CARD_MAX_W;
+	let artHeight = Math.round(width / ratio);
+	if (artHeight > CARD_MAX_H) {
+		artHeight = CARD_MAX_H;
+		width = Math.round(artHeight * ratio);
+	}
 
-	// Giữ nguyên khung hình gốc, chỉ giới hạn chiều rộng và chiều cao cho dễ xem.
-	// Ảnh quá dẹt thì đệm nền mờ hai bên thay vì cắt mất nội dung.
-	const width = CARD_MAX_W;
-	const natural = Math.round(width / ratio);
-	const height = Math.max(CARD_MIN_H, Math.min(CARD_MAX_H, natural));
-
-	const base = hero
-		? await fitWhole(hero, width, height)
-		: await sharp({ create: { width, height, channels: 3, background: { r: 32, g: 34, b: 44 } } })
-				.png()
-				.toBuffer();
-
-	// Cỡ chữ co theo bề rộng để ảnh nhỏ vẫn cân đối.
 	const padX = Math.round(width * 0.045);
-	const nameFont = Math.round(width * 0.042);
+	const nameFont = Math.round(width * 0.043);
 	const metaFont = Math.round(width * 0.024);
 	const noteFont = Math.round(width * 0.019);
 	const badgeFont = Math.round(width * 0.023);
@@ -219,34 +212,44 @@ export async function renderQuestCard(
 	const badgeH = Math.round(badgeFont * 1.9);
 	const badgeX = width - badgeW - Math.round(width * 0.028);
 	const badgeY = Math.round(width * 0.028);
-	// Xếp chữ từ dưới lên, mỗi dòng cần chỗ cho cỡ chữ của chính nó.
-	const noteGap = Math.round(noteFont * 0.9);
-	const metaGap = noteGap + Math.round(metaFont * 1.5);
-	const nameGap = metaGap + Math.round(nameFont * 1.15);
+
+	// Dải chữ hai dòng: tên, rồi dòng phụ gộp vùng và ghi chú.
+	const subtitle = [metaLine(quest), options.note ?? ''].filter(Boolean).join(' · ');
+	const panelH = Math.round(nameFont * 1.3 + metaFont * 2 + width * 0.022);
+	const height = artHeight + panelH;
+
+	const art = hero
+		? await sharp(hero).resize(width, artHeight, { fit: 'fill' }).toBuffer()
+		: await sharp({ create: { width, height: artHeight, channels: 3, background: { r: 32, g: 34, b: 44 } } })
+				.png()
+				.toBuffer();
 
 	const name = escapeXml(clip(quest.name, 44));
-	const metaText = escapeXml(clip(metaLine(quest), 60));
-	const note = options.note ? escapeXml(clip(options.note, 54)) : '';
+	const metaText = escapeXml(clip(subtitle, 74));
 	const badge = `${options.index + 1}/${options.total}`;
 
 	const overlay = Buffer.from(`
 <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
 	<defs>
 		<linearGradient id="shade" x1="0" y1="0" x2="0" y2="1">
+			<stop offset="0%" stop-color="#000000" stop-opacity="0.55"/>
 			<stop offset="45%" stop-color="#000000" stop-opacity="0"/>
-			<stop offset="100%" stop-color="#000000" stop-opacity="0.9"/>
 		</linearGradient>
 	</defs>
-	<rect width="${width}" height="${height}" fill="url(#shade)"/>
-	<rect x="${badgeX}" y="${badgeY}" width="${badgeW}" height="${badgeH}" rx="${badgeH / 2}" fill="#000000" fill-opacity="0.55"/>
+	<rect width="${width}" height="${artHeight}" fill="url(#shade)"/>
+	<rect x="0" y="${artHeight}" width="${width}" height="${panelH}" fill="#14151a"/>
+	<rect x="${badgeX}" y="${badgeY}" width="${badgeW}" height="${badgeH}" rx="${badgeH / 2}" fill="#000000" fill-opacity="0.6"/>
 	<text x="${badgeX + badgeW / 2}" y="${badgeY + badgeH * 0.68}" text-anchor="middle" font-family="DejaVu Sans, Noto Sans, Noto Sans Thai, Noto Sans CJK JP, sans-serif" font-size="${badgeFont}" fill="#ffffff">${badge}</text>
-	<text x="${padX}" y="${height - nameGap}" font-family="DejaVu Sans, Noto Sans, Noto Sans Thai, Noto Sans CJK JP, sans-serif" font-size="${nameFont}" font-weight="bold" fill="#ffffff">${name}</text>
-	<text x="${padX}" y="${height - metaGap}" font-family="DejaVu Sans, Noto Sans, Noto Sans Thai, Noto Sans CJK JP, sans-serif" font-size="${metaFont}" fill="#d5d8e0">${metaText}</text>
-	${note ? `<text x="${padX}" y="${height - noteGap}" font-family="DejaVu Sans, Noto Sans, Noto Sans Thai, Noto Sans CJK JP, sans-serif" font-size="${noteFont}" fill="#9aa0ad">${note}</text>` : ''}
+	<text x="${padX}" y="${artHeight + Math.round(nameFont * 1.3)}" font-family="DejaVu Sans, Noto Sans, Noto Sans Thai, Noto Sans CJK JP, sans-serif" font-size="${nameFont}" font-weight="bold" fill="#ffffff">${name}</text>
+	<text x="${padX}" y="${artHeight + Math.round(nameFont * 1.3 + metaFont * 1.85)}" font-family="DejaVu Sans, Noto Sans, Noto Sans Thai, Noto Sans CJK JP, sans-serif" font-size="${metaFont}" fill="#c9ced8">${metaText}</text>
 </svg>`);
 
-	return sharp(base)
-		.composite([{ input: overlay, top: 0, left: 0 }])
+	// Khung cuối = ảnh bìa phía trên + dải chữ phía dưới, không thêm khoảng trống.
+	return sharp({ create: { width, height, channels: 3, background: { r: 20, g: 21, b: 26 } } })
+		.composite([
+			{ input: art, top: 0, left: 0 },
+			{ input: overlay, top: 0, left: 0 },
+		])
 		.png({ compressionLevel: 9 })
 		.toBuffer();
 }
