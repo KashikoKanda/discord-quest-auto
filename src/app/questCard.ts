@@ -66,6 +66,31 @@ function labelSvg(quest: CardQuest): Buffer {
 </svg>`);
 }
 
+/**
+ * Đưa ảnh bìa vào khung mà không cắt: nền là chính ảnh đó phóng to làm mờ, còn
+ * ảnh thật nằm trọn ở giữa.
+ */
+async function fitWhole(hero: Buffer, width: number, height: number): Promise<Buffer> {
+	const backdrop = await sharp(hero)
+		.resize(width, height, { fit: 'cover' })
+		.blur(26)
+		.modulate({ brightness: 0.55 })
+		.toBuffer()
+		.catch(() => null);
+
+	const front = await sharp(hero)
+		.resize(width, height, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+		.toBuffer()
+		.catch(() => null);
+
+	if (!front) return backdrop ?? hero;
+	if (!backdrop) return front;
+
+	return sharp(backdrop)
+		.composite([{ input: front, top: 0, left: 0 }])
+		.toBuffer();
+}
+
 async function fetchHero(hero: string | null): Promise<Buffer | null> {
 	if (!hero) return null;
 	try {
@@ -81,12 +106,7 @@ async function fetchHero(hero: string | null): Promise<Buffer | null> {
 
 async function buildCell(quest: CardQuest): Promise<Buffer> {
 	const hero = await fetchHero(quest.hero);
-	const base = hero
-		? await sharp(hero)
-				.resize(CELL_W, CELL_H, { fit: 'cover', position: 'centre' })
-				.toBuffer()
-				.catch(() => null)
-		: null;
+	const base = hero ? await fitWhole(hero, CELL_W, CELL_H) : null;
 
 	// Không có ảnh bìa thì dùng nền chuyển sắc để ô vẫn đọc được.
 	const canvas = base
@@ -157,50 +177,57 @@ export async function renderQuestGrid(
 	return { png, width, height, drawn: cells.filter(Boolean).length };
 }
 
-const CARD_W = 900;
-const CARD_H = 500;
+const CARD_MAX_W = 900;
+const CARD_MAX_H = 900;
+const CARD_MIN_H = 420;
 
-/** Một quest thành một tấm ảnh riêng, kèm số thứ tự. */
+/** Một quest thành một tấm ảnh riêng, giữ nguyên khung hình gốc của ảnh bìa. */
 export async function renderQuestCard(
 	quest: CardQuest,
 	options: { index: number; total: number; note?: string } = { index: 0, total: 1 },
 ): Promise<Buffer> {
 	const hero = await fetchHero(quest.hero);
-	const subject =
-		hero &&
-		(await sharp(hero)
-			.metadata()
-			.catch(() => null))
-			? sharp(hero)
-			: sharp({
-					create: {
-						width: CARD_W,
-						height: CARD_H,
-						channels: 3,
-						background: { r: 32, g: 34, b: 44 },
-					},
-				});
+	const meta = hero
+		? await sharp(hero)
+				.metadata()
+				.catch(() => null)
+		: null;
 
-	const base = await subject.resize(CARD_W, CARD_H, { fit: 'cover', position: 'centre' }).toBuffer();
+	const sourceWidth = meta?.width ?? 16;
+	const sourceHeight = meta?.height ?? 9;
+	const ratio = sourceWidth / sourceHeight;
+
+	// Giữ nguyên khung hình gốc, chỉ giới hạn chiều rộng và chiều cao cho dễ xem.
+	// Ảnh quá dẹt thì đệm nền mờ hai bên thay vì cắt mất nội dung.
+	const width = CARD_MAX_W;
+	const natural = Math.round(width / ratio);
+	const height = Math.max(CARD_MIN_H, Math.min(CARD_MAX_H, natural));
+
+	const base = hero
+		? await fitWhole(hero, width, height)
+		: await sharp({ create: { width, height, channels: 3, background: { r: 32, g: 34, b: 44 } } })
+				.png()
+				.toBuffer();
 
 	const name = escapeXml(clip(quest.name, 44));
-	const meta = escapeXml(clip(metaLine(quest), 60));
+	const metaText = escapeXml(clip(metaLine(quest), 60));
 	const note = options.note ? escapeXml(clip(options.note, 54)) : '';
+	const badge = `${options.index + 1}/${options.total}`;
 
 	const overlay = Buffer.from(`
-<svg width="${CARD_W}" height="${CARD_H}" xmlns="http://www.w3.org/2000/svg">
+<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
 	<defs>
 		<linearGradient id="shade" x1="0" y1="0" x2="0" y2="1">
-			<stop offset="30%" stop-color="#000000" stop-opacity="0"/>
-			<stop offset="100%" stop-color="#000000" stop-opacity="0.92"/>
+			<stop offset="45%" stop-color="#000000" stop-opacity="0"/>
+			<stop offset="100%" stop-color="#000000" stop-opacity="0.9"/>
 		</linearGradient>
 	</defs>
-	<rect width="${CARD_W}" height="${CARD_H}" fill="url(#shade)"/>
-	<rect x="${CARD_W - 128}" y="24" width="104" height="40" rx="20" fill="#000000" fill-opacity="0.55"/>
-	<text x="${CARD_W - 76}" y="51" text-anchor="middle" font-family="DejaVu Sans, Noto Sans, Noto Sans Thai, Noto Sans CJK JP, sans-serif" font-size="20" fill="#ffffff">${options.index + 1}/${options.total}</text>
-	<text x="36" y="${CARD_H - 78}" font-family="DejaVu Sans, Noto Sans, Noto Sans Thai, Noto Sans CJK JP, sans-serif" font-size="40" font-weight="bold" fill="#ffffff">${name}</text>
-	<text x="36" y="${CARD_H - 40}" font-family="DejaVu Sans, Noto Sans, Noto Sans Thai, Noto Sans CJK JP, sans-serif" font-size="22" fill="#d5d8e0">${meta}</text>
-	${note ? `<text x="36" y="${CARD_H - 12}" font-family="DejaVu Sans, Noto Sans, Noto Sans Thai, Noto Sans CJK JP, sans-serif" font-size="18" fill="#9aa0ad">${note}</text>` : ''}
+	<rect width="${width}" height="${height}" fill="url(#shade)"/>
+	<rect x="${width - 128}" y="20" width="104" height="40" rx="20" fill="#000000" fill-opacity="0.55"/>
+	<text x="${width - 76}" y="47" text-anchor="middle" font-family="DejaVu Sans, Noto Sans, Noto Sans Thai, Noto Sans CJK JP, sans-serif" font-size="20" fill="#ffffff">${badge}</text>
+	<text x="36" y="${height - 70}" font-family="DejaVu Sans, Noto Sans, Noto Sans Thai, Noto Sans CJK JP, sans-serif" font-size="36" font-weight="bold" fill="#ffffff">${name}</text>
+	<text x="36" y="${height - 34}" font-family="DejaVu Sans, Noto Sans, Noto Sans Thai, Noto Sans CJK JP, sans-serif" font-size="21" fill="#d5d8e0">${metaText}</text>
+	${note ? `<text x="36" y="${height - 10}" font-family="DejaVu Sans, Noto Sans, Noto Sans Thai, Noto Sans CJK JP, sans-serif" font-size="17" fill="#9aa0ad">${note}</text>` : ''}
 </svg>`);
 
 	return sharp(base)
