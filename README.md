@@ -212,7 +212,7 @@ gateway is ready.
 | :------------- | :------------------------------------------------------------ |
 | `/link`        | Opens a private form; paste the account token there           |
 | `/quests`      | Quest list with type, state and progress bars                 |
-| `/hidden`      | Hidden quests as a cover-art grid, with `/hidden enroll:<id>` |
+| `/hidden`      | Hidden quests one card at a time: back, enrol, next |
 | `/proxy`       | Proxy list health; `/proxy reload:true` refetches it          |
 | `/run [quest]` | Complete quests, progress streams into the reply              |
 | `/stop`        | Stop the current run                                          |

@@ -5,6 +5,7 @@ import { tokenIdFor } from '../core/config';
 import { logger } from '../core/logger';
 import type { CommandName, GatewayInteraction } from './interface';
 import { editOriginal, editOriginalWithFile, EPHEMERAL, followUp, replyInteraction } from './rest';
+import { handleHiddenButton, isHiddenButton, rememberHidden, sendHiddenPage } from './hiddenView';
 import { getAccount, linkAccount, setAuto, unlinkAccount } from './store';
 
 export const commandDefs = [
@@ -318,54 +319,26 @@ async function handleDeferredCommand(interaction: GatewayInteraction, command: C
 					? 'Nguồn proxy có cấu hình nhưng danh sách rỗng.'
 					: 'Chưa cấu hình proxy (PROXY_LIST_URL).';
 
-			// Ảnh lưới cho phần nhìn, embed chỉ còn số liệu và hướng dẫn.
-			const { renderQuestGrid } = await import('./questCard');
-			const grid = await renderQuestGrid(
-				list.map((quest) => ({
-					id: quest.id,
-					name: quest.name,
-					minutes: quest.minutes,
-					type: quest.type,
-					tag:
-						quest.region?.isGlobal && quest.region.include.length === 0
-							? 'toàn cầu'
-							: (quest.region?.include ?? []).slice(0, 2).join('/') || 'chưa rõ',
-					hero: quest.hero,
-				})),
-				{ title: `Quest ẩn · ${list.length} quest`, columns: 3, max: 9 },
-			).catch(() => null);
+			// Mỗi quest một ảnh, chuyển bằng nút Trở lại / Tiếp, nhận bằng nút giữa.
+			const userId = userIdOf(interaction) ?? '';
+			rememberHidden(userId, list);
+			await sendHiddenPage(interaction.token, list, 0);
 
-			const hint = `Nhận quest: \`/hidden enroll:<id>\`\nXem mã quest trong tin nhắn riêng bên dưới.\n${proxyNote}`;
-			const body = `**${list.length}** quest trong danh mục mà tài khoản chưa có${
-				list.length > 9 ? ` · ảnh hiện 9 quest ngắn nhất` : ''
-			}\n\n${hint}`;
-			const embedBase = embed(`Quest ẩn`, body, 0x5865f2);
-
-			if (grid) {
-				await editOriginalWithFile(
-					interaction.token,
-					{
-						embeds: [{ ...embedBase, image: { url: 'attachment://quest-hidden.png' } }],
-						attachments: [{ id: 0, filename: 'quest-hidden.png', description: 'Ảnh bìa quest ẩn' }],
-					},
-					{ name: 'quest-hidden.png', data: grid.png },
-				);
-			} else {
-				await editOriginal(interaction.token, { embeds: [embedBase] });
-			}
-
-			// Danh sách ID vẫn cần để gõ /hidden enroll, gửi kèm dạng chữ.
 			const ids = list
 				.slice(0, 12)
 				.map((quest) => `${quest.name} · \`${quest.id}\``)
 				.join('\n');
 			await followUp(interaction.token, {
 				embeds: [
-					embed(
-						'ID để nhận quest',
-						`${ids}${list.length > 12 ? `\n… và ${list.length - 12} quest khác, dùng \`npm run hidden\` để xem hết` : ''}`,
-						0x2b2d31,
-					),
+					{
+						color: 0x2b2d31,
+						title: 'ID quest ẩn',
+						description: `${ids}${
+							list.length > 12
+								? `\n… và ${list.length - 12} quest khác, xem hết bằng \`npm run hidden\``
+								: ''
+						}\n\n${proxyNote}`,
+					},
 				],
 				flags: EPHEMERAL,
 			}).catch(() => null);
@@ -501,6 +474,12 @@ export async function handleInteraction(interaction: GatewayInteraction): Promis
 		// MODAL_SUBMIT
 		if (interaction.type === 5) {
 			if (interaction.data?.custom_id === LINK_MODAL) await handleLinkModal(interaction);
+			return;
+		}
+
+		// Nút bấm trên tin nhắn quest ẩn.
+		if (interaction.type === 3) {
+			if (isHiddenButton(interaction.data?.custom_id ?? '')) await handleHiddenButton(interaction);
 			return;
 		}
 		if (interaction.type !== 2) return;

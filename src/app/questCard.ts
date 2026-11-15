@@ -156,3 +156,55 @@ export async function renderQuestGrid(
 
 	return { png, width, height, drawn: cells.filter(Boolean).length };
 }
+
+const CARD_W = 900;
+const CARD_H = 500;
+
+/** Một quest thành một tấm ảnh riêng, kèm số thứ tự. */
+export async function renderQuestCard(
+	quest: CardQuest,
+	options: { index: number; total: number; note?: string } = { index: 0, total: 1 },
+): Promise<Buffer> {
+	const hero = await fetchHero(quest.hero);
+	const subject =
+		hero &&
+		(await sharp(hero)
+			.metadata()
+			.catch(() => null))
+			? sharp(hero)
+			: sharp({
+					create: {
+						width: CARD_W,
+						height: CARD_H,
+						channels: 3,
+						background: { r: 32, g: 34, b: 44 },
+					},
+				});
+
+	const base = await subject.resize(CARD_W, CARD_H, { fit: 'cover', position: 'centre' }).toBuffer();
+
+	const name = escapeXml(clip(quest.name, 44));
+	const meta = escapeXml(clip(metaLine(quest), 60));
+	const note = options.note ? escapeXml(clip(options.note, 54)) : '';
+
+	const overlay = Buffer.from(`
+<svg width="${CARD_W}" height="${CARD_H}" xmlns="http://www.w3.org/2000/svg">
+	<defs>
+		<linearGradient id="shade" x1="0" y1="0" x2="0" y2="1">
+			<stop offset="30%" stop-color="#000000" stop-opacity="0"/>
+			<stop offset="100%" stop-color="#000000" stop-opacity="0.92"/>
+		</linearGradient>
+	</defs>
+	<rect width="${CARD_W}" height="${CARD_H}" fill="url(#shade)"/>
+	<rect x="${CARD_W - 128}" y="24" width="104" height="40" rx="20" fill="#000000" fill-opacity="0.55"/>
+	<text x="${CARD_W - 76}" y="51" text-anchor="middle" font-family="DejaVu Sans, Noto Sans, Noto Sans Thai, Noto Sans CJK JP, sans-serif" font-size="20" fill="#ffffff">${options.index + 1}/${options.total}</text>
+	<text x="36" y="${CARD_H - 78}" font-family="DejaVu Sans, Noto Sans, Noto Sans Thai, Noto Sans CJK JP, sans-serif" font-size="40" font-weight="bold" fill="#ffffff">${name}</text>
+	<text x="36" y="${CARD_H - 40}" font-family="DejaVu Sans, Noto Sans, Noto Sans Thai, Noto Sans CJK JP, sans-serif" font-size="22" fill="#d5d8e0">${meta}</text>
+	${note ? `<text x="36" y="${CARD_H - 12}" font-family="DejaVu Sans, Noto Sans, Noto Sans Thai, Noto Sans CJK JP, sans-serif" font-size="18" fill="#9aa0ad">${note}</text>` : ''}
+</svg>`);
+
+	return sharp(base)
+		.composite([{ input: overlay, top: 0, left: 0 }])
+		.png({ compressionLevel: 9 })
+		.toBuffer();
+}
