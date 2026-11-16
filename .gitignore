@@ -17,3 +17,4 @@ logs/
 .quest-catalog.json
 .quest-proxies.json
 hidden-*.png
+proxies.txt
