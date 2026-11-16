@@ -23,8 +23,8 @@ export async function handleQrCommand(interaction: GatewayInteraction): Promise<
 
 	/** Nút mở link đăng nhập, có sau khi biết fingerprint. */
 	let button: Record<string, unknown>[] = [];
-	/** Tên tài khoản đã xác nhận trên app, dùng khi trạng thái quét tới sớm. */
-	let scanned: string | null = null;
+	/** Người dùng đã xác nhận trên app chưa, để áp lại trạng thái nếu tới sớm. */
+	let confirmed = false;
 	/** Tin nhắn thông báo trong kênh, có mention để người dùng nhận thông báo. */
 	let noticeId: string | null = null;
 	const channelId = interaction.channel_id ?? '';
@@ -46,7 +46,7 @@ export async function handleQrCommand(interaction: GatewayInteraction): Promise<
 				{
 					color: AMBER,
 					title: '🔐 Đang đăng nhập',
-					description: `${scanned ? `**${scanned}**` : '**User**'} đã xác nhận, đang lấy token…`,
+					description: `Đăng nhập với tư cách <@${userId}>\n-# Đã xác nhận, đang lấy token…`,
 				},
 			],
 			components: button,
@@ -56,7 +56,7 @@ export async function handleQrCommand(interaction: GatewayInteraction): Promise<
 		// còn tin nhắn tạm (ephemeral) thì sửa thế nào cũng im lặng.
 		if (!channelId || noticeId) return;
 		const sent = await sendChannelMessage(channelId, {
-			content: `<@${userId}> ${scanned ? `**${scanned}**` : '**User**'} Đang đăng nhập`,
+			content: `Đăng nhập với tư cách <@${userId}>`,
 			allowed_mentions: { parse: ['users'] },
 		});
 		noticeId = sent?.id ?? null;
@@ -69,7 +69,8 @@ export async function handleQrCommand(interaction: GatewayInteraction): Promise<
 		session = await startQrLogin({
 			onScanned: (username) => {
 				// Có thể tới trước cả lúc tin nhắn kịp hiện nút; giữ lại để áp sau.
-				scanned = username ?? 'User';
+				confirmed = true;
+				void username;
 				if (button.length > 0) showScanned().catch(() => undefined);
 			},
 		});
@@ -99,7 +100,7 @@ export async function handleQrCommand(interaction: GatewayInteraction): Promise<
 	await editOriginal(interaction.token, { content: '', components: button });
 
 	// Nếu người dùng xác nhận trước khi nút kịp hiện, cập nhật lại cho khớp trạng thái.
-	if (scanned) await showScanned().catch(() => undefined);
+	if (confirmed) await showScanned().catch(() => undefined);
 
 	const closeNotice = async (content: string) => {
 		if (!channelId || !noticeId) return;
@@ -114,7 +115,7 @@ export async function handleQrCommand(interaction: GatewayInteraction): Promise<
 	});
 
 	if (!token) {
-		await closeNotice(`<@${userId}> Đăng nhập không hoàn tất`);
+		await closeNotice(`Đăng nhập với tư cách <@${userId}> không hoàn tất`);
 		await editOriginal(interaction.token, {
 			embeds: [
 				{
@@ -145,7 +146,7 @@ export async function handleQrCommand(interaction: GatewayInteraction): Promise<
 		return;
 	}
 
-	await closeNotice(`<@${userId}> ✅ Đã đăng nhập **${username}**`);
+	await closeNotice(`✅ Đã đăng nhập với tư cách <@${userId}>`);
 	await editOriginal(interaction.token, {
 		embeds: [
 			{
