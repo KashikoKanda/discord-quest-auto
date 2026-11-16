@@ -12,8 +12,8 @@ import { getAccount, linkAccount, setAuto, unlinkAccount } from './store';
 export const commandDefs = [
 	{ name: 'help', description: 'Cách dùng bot quest', type: 1 },
 	{
-		name: 'qr',
-		description: 'Đăng nhập bằng mã QR của app Discord (không cần dán token)',
+		name: 'login',
+		description: 'Đăng nhập tài khoản qua Discord, không cần dán token',
 		type: 1,
 	},
 	{
@@ -588,7 +588,7 @@ export async function handleInteraction(interaction: GatewayInteraction): Promis
 			return;
 		}
 
-		if (command === 'qr') {
+		if (command === 'login') {
 			await replyInteraction(interaction.id, interaction.token, { type: 5, data: { flags: EPHEMERAL } });
 			await handleQrCommand(interaction);
 			return;

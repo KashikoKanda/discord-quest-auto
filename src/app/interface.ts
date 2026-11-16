@@ -1,5 +1,17 @@
 export type CommandName =
-	'help' | 'link' | 'qr' | 'unlink' | 'quests' | 'hidden' | 'proxy' | 'run' | 'stop' | 'claim' | 'status' | 'auto';
+	| 'help'
+	| 'link'
+	| 'login'
+	| 'qr'
+	| 'unlink'
+	| 'quests'
+	| 'hidden'
+	| 'proxy'
+	| 'run'
+	| 'stop'
+	| 'claim'
+	| 'status'
+	| 'auto';
 
 export interface CommandOption {
 	name: string;

@@ -6,7 +6,7 @@
  */
 
 import type { GatewayInteraction } from './interface';
-import { editOriginal, editOriginalWithFile, EPHEMERAL, followUp } from './rest';
+import { editOriginal, EPHEMERAL, followUp } from './rest';
 import { linkAccount } from './store';
 import { getDiscordProfile } from '../api/client';
 import { tokenIdFor } from '../core/config';
@@ -51,30 +51,41 @@ export async function handleQrCommand(interaction: GatewayInteraction): Promise<
 		return;
 	}
 
-	await editOriginalWithFile(
-		interaction.token,
-		{
-			embeds: [
-				{
-					color: 0x5865f2,
-					title: 'Quét mã bằng app Discord',
-					description: [
-						'Mở Discord trên điện thoại → **Bạn** → biểu tượng quét mã ở góc trên.',
-						'',
-						`Mã hết hạn sau 2 phút. Hoặc mở: https://discord.com/ra/${session.fingerprint}`,
-					].join('\n'),
-					image: { url: 'attachment://discord-qr.png' },
-					footer: {
-						text: `IP: ${session.ip ?? 'không xác định'} (${session.ipNote}) · đi thẳng: ${
-							session.directIp ?? '?'
-						} · không chia sẻ mã này`,
-					},
+	const link = `https://discord.com/ra/${session.fingerprint}`;
+
+	await editOriginal(interaction.token, {
+		embeds: [
+			{
+				color: 0x5865f2,
+				title: 'Đăng nhập Discord',
+				description: [
+					'Bấm nút bên dưới để mở Discord và xác nhận đăng nhập.',
+					'',
+					'**Trên điện thoại:** mở app → bấm nút → **Xác nhận**.',
+					'**Trên máy tính:** bấm nút, Discord sẽ mở trang xác nhận.',
+					'',
+					`Hoặc mở link này: ${link}`,
+				].join('\n'),
+				footer: {
+					text: `Hết hạn sau 2 phút · IP: ${session.ip ?? 'không xác định'} (${session.ipNote})`,
 				},
-			],
-			attachments: [{ id: 0, filename: 'discord-qr.png', description: 'Mã QR đăng nhập Discord' }],
-		},
-		{ name: 'discord-qr.png', data: session.png },
-	);
+			},
+		],
+		components: [
+			{
+				type: 1,
+				components: [
+					{
+						type: 2,
+						style: 5,
+						label: 'Đăng nhập Discord',
+						emoji: { name: '🔐' },
+						url: link,
+					},
+				],
+			},
+		],
+	});
 
 	let failure: string | null = null;
 	const token = await session.wait.catch((error: Error) => {

@@ -67,7 +67,8 @@ export interface LogEntry {
 	timestamp: number;
 }
 
-export type Command = 'run' | 'list' | 'hidden' | 'proxy' | 'qr' | 'claim' | 'auto' | 'status' | 'stop' | 'help';
+export type Command =
+	'run' | 'list' | 'hidden' | 'proxy' | 'login' | 'qr' | 'claim' | 'auto' | 'status' | 'stop' | 'help';
 
 export interface TokenSession {
 	token: string;

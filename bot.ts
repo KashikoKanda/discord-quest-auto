@@ -29,7 +29,7 @@ Lệnh
   run       làm toàn bộ quest đang có rồi tự nhận thưởng   (mặc định)
   list      liệt kê quest kèm tiến trình
   hidden    xem quest ẩn (có trong danh mục nhưng tài khoản không thấy)
-  qr        đăng nhập bằng mã QR của app Discord (không cần dán token)
+  login     đăng nhập tài khoản qua Discord (không cần dán token)
   proxy     xem danh sách proxy và nguồn tải
   claim     nhận thưởng cho quest đã hoàn thành
   auto      chạy nền, quét lại mỗi 5 phút
@@ -264,7 +264,7 @@ async function claimCompleted(token: string, tokenId: string): Promise<number> {
 }
 
 async function main(): Promise<void> {
-	const known = ['run', 'list', 'hidden', 'proxy', 'qr', 'claim', 'auto', 'status', 'stop', 'help'];
+	const known = ['run', 'list', 'hidden', 'proxy', 'login', 'qr', 'claim', 'auto', 'status', 'stop', 'help'];
 	if (!known.includes(command)) {
 		logger.error(`Không có lệnh "${command}".`);
 		logger.blank();
@@ -331,9 +331,9 @@ async function main(): Promise<void> {
 		return;
 	}
 
-	if (command === 'qr') {
-		const { startQrLogin, qrToTerminal } = await import('./src/api/qrAuth');
-		logger.header('Đăng nhập bằng QR', 'mở app Discord trên điện thoại để quét');
+	if (command === 'login' || command === 'qr') {
+		const { startQrLogin } = await import('./src/api/qrAuth');
+		logger.header('Đăng nhập Discord', 'mở link bên dưới rồi xác nhận');
 
 		const chosen = flag('proxy');
 		const session = await startQrLogin(
@@ -354,8 +354,7 @@ async function main(): Promise<void> {
 			process.exitCode = 1;
 			return;
 		}
-		logger.plain(await qrToTerminal(session.fingerprint));
-		logger.info(`Hoặc mở: https://discord.com/ra/${session.fingerprint}`);
+		logger.info(`Mở link này để xác nhận: https://discord.com/ra/${session.fingerprint}`);
 		logger.plain(`  IP phiên  ${session.ip ?? 'không xác định'} (${session.ipNote})`);
 		logger.plain(`  đi thẳng  ${session.directIp ?? 'không xác định'}`);
 		logger.info('Chờ tối đa 2 phút...');
