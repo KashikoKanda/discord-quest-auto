@@ -78,23 +78,12 @@ export async function handleQrCommand(interaction: GatewayInteraction): Promise<
 	button = [
 		{
 			type: 1,
-			components: [{ type: 2, style: 5, label: 'Đăng nhập', emoji: { name: '🔐' }, url: link }],
+			components: [{ type: 2, style: 5, label: 'Đăng nhập ngay', emoji: { name: '🔐' }, url: link }],
 		},
 	];
 
-	await editOriginal(interaction.token, {
-		embeds: [
-			{
-				color: BLURPLE,
-				title: '🔐 Đăng nhập Discord',
-				description: [
-					'Bấm **Đăng nhập**, xác nhận trong app là xong.',
-					`-# Link hết hạn sau 2 phút · IP ${session.ip ?? 'không xác định'} (${session.ipNote})`,
-				].join('\n'),
-			},
-		],
-		components: button,
-	});
+	// Chỉ gửi nút, không kèm chữ nào.
+	await editOriginal(interaction.token, { content: '', components: button });
 
 	// Nếu người dùng xác nhận trước khi nút kịp hiện, cập nhật lại cho khớp trạng thái.
 	if (scanned) await showScanned().catch(() => undefined);
