@@ -114,4 +114,37 @@ export async function followUp(interactionToken: string, body: Record<string, un
 	}
 }
 
+/** Gửi một tin nhắn thường vào kênh (không phải trả lời interaction). */
+export async function sendChannelMessage(
+	channelId: string,
+	body: Record<string, unknown>,
+): Promise<{ id?: string } | null> {
+	const res = await botFetch(`/channels/${channelId}/messages`, {
+		method: 'POST',
+		body: JSON.stringify(body),
+	});
+	if (!res.ok) {
+		const detail = await res.text().catch(() => '');
+		logger.warn(`Gửi tin nhắn kênh lỗi ${res.status}: ${redact(detail).slice(0, 200)}`);
+		return null;
+	}
+	return (await res.json().catch(() => null)) as { id?: string } | null;
+}
+
+/** Sửa một tin nhắn đã gửi trong kênh. */
+export async function editChannelMessage(
+	channelId: string,
+	messageId: string,
+	body: Record<string, unknown>,
+): Promise<void> {
+	const res = await botFetch(`/channels/${channelId}/messages/${messageId}`, {
+		method: 'PATCH',
+		body: JSON.stringify(body),
+	});
+	if (!res.ok) {
+		const detail = await res.text().catch(() => '');
+		logger.warn(`Sửa tin nhắn kênh lỗi ${res.status}: ${redact(detail).slice(0, 200)}`);
+	}
+}
+
 export const EPHEMERAL = 64;

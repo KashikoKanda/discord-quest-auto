@@ -6,7 +6,7 @@
  */
 
 import type { GatewayInteraction } from './interface';
-import { editOriginal } from './rest';
+import { editChannelMessage, editOriginal, sendChannelMessage } from './rest';
 import { linkAccount } from './store';
 import { getDiscordProfile } from '../api/client';
 import { tokenIdFor } from '../core/config';
@@ -25,6 +25,9 @@ export async function handleQrCommand(interaction: GatewayInteraction): Promise<
 	let button: Record<string, unknown>[] = [];
 	/** Tên tài khoản đã xác nhận trên app, dùng khi trạng thái quét tới sớm. */
 	let scanned: string | null = null;
+	/** Tin nhắn thông báo trong kênh, có mention để người dùng nhận thông báo. */
+	let noticeId: string | null = null;
+	const channelId = interaction.channel_id ?? '';
 
 	const waiting = async () =>
 		editOriginal(interaction.token, {
@@ -37,8 +40,8 @@ export async function handleQrCommand(interaction: GatewayInteraction): Promise<
 			],
 		});
 
-	const showScanned = async () =>
-		editOriginal(interaction.token, {
+	const showScanned = async () => {
+		await editOriginal(interaction.token, {
 			embeds: [
 				{
 					color: AMBER,
@@ -48,6 +51,16 @@ export async function handleQrCommand(interaction: GatewayInteraction): Promise<
 			],
 			components: button,
 		});
+
+		// Tin nhắn riêng trong kênh kèm mention: chỉ mention mới tạo thông báo,
+		// còn tin nhắn tạm (ephemeral) thì sửa thế nào cũng im lặng.
+		if (!channelId || noticeId) return;
+		const sent = await sendChannelMessage(channelId, {
+			content: `<@${userId}> ${scanned ? `**${scanned}**` : '**User**'} Đang đăng nhập`,
+			allowed_mentions: { parse: ['users'] },
+		});
+		noticeId = sent?.id ?? null;
+	};
 
 	await waiting();
 
@@ -88,6 +101,11 @@ export async function handleQrCommand(interaction: GatewayInteraction): Promise<
 	// Nếu người dùng xác nhận trước khi nút kịp hiện, cập nhật lại cho khớp trạng thái.
 	if (scanned) await showScanned().catch(() => undefined);
 
+	const closeNotice = async (content: string) => {
+		if (!channelId || !noticeId) return;
+		await editChannelMessage(channelId, noticeId, { content, allowed_mentions: { parse: [] } });
+	};
+
 	let failure: string | null = null;
 	const token = await session.wait.catch((error: Error) => {
 		logger.warn(`Đăng nhập thất bại: ${error.message}`);
@@ -96,6 +114,7 @@ export async function handleQrCommand(interaction: GatewayInteraction): Promise<
 	});
 
 	if (!token) {
+		await closeNotice(`<@${userId}> Đăng nhập không hoàn tất`);
 		await editOriginal(interaction.token, {
 			embeds: [
 				{
@@ -126,6 +145,7 @@ export async function handleQrCommand(interaction: GatewayInteraction): Promise<
 		return;
 	}
 
+	await closeNotice(`<@${userId}> ✅ Đã đăng nhập **${username}**`);
 	await editOriginal(interaction.token, {
 		embeds: [
 			{
