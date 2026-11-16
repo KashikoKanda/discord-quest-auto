@@ -337,7 +337,10 @@ export async function startQrLogin(
 						Number(message.heartbeat_interval) || 41_250,
 					);
 					ws.send(JSON.stringify({ op: 'init', encoded_public_key: encodedPublicKey }));
-					timer = setTimeout(() => fail(new Error('Hết thời gian chờ quét mã (2 phút)')), TTL_MS);
+					// Discord tự đóng phiên sau timeout_ms; dừng sớm hơn 8 giây để còn báo kịp.
+					const serverTimeout = Number(message.timeout_ms) || TTL_MS;
+					const life = Math.max(30_000, serverTimeout - 8_000);
+					timer = setTimeout(() => fail(new Error(`Link hết hạn sau ${Math.round(life / 1000)} giây`)), life);
 					break;
 				}
 
@@ -398,7 +401,7 @@ export async function startQrLogin(
 				}
 
 				case 'cancel': {
-					fail(new Error('Điện thoại đã huỷ đăng nhập'));
+					fail(new Error('Link đã bị huỷ hoặc thiết bị không tìm thấy phiên này'));
 					break;
 				}
 

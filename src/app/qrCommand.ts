@@ -12,6 +12,15 @@ import { getDiscordProfile } from '../api/client';
 import { tokenIdFor } from '../core/config';
 import { logger } from '../core/logger';
 
+interface LiveSession {
+	cancel: () => void;
+	/** Token interaction của tin nhắn cũ, để sửa nó khi có link mới. */
+	interactionToken: string;
+}
+
+/** Phiên đang mở của từng người, để link cũ không còn sống khi có link mới. */
+const liveSessions = new Map<string, LiveSession>();
+
 const BLURPLE = 0x5865f2;
 const AMBER = 0xfaa61a;
 const GREEN = 0x57f287;
@@ -64,6 +73,17 @@ export async function handleQrCommand(interaction: GatewayInteraction): Promise<
 
 	await waiting();
 
+	// Mỗi người chỉ giữ một link sống. Link cũ mà bấm vào sẽ ra trang "không tìm thấy
+	// thiết bị" của Discord, nên huỷ hẳn phiên trước.
+	const previous = liveSessions.get(userId);
+	if (previous) {
+		previous.cancel();
+		// Tin nhắn cũ vẫn còn nút; ghi đè để người dùng biết bấm vào là vô ích.
+		await editOriginal(previous.interactionToken, {
+			embeds: [{ color: AMBER, description: 'Link này đã được thay bằng lần `/login` mới hơn.' }],
+		}).catch(() => undefined);
+	}
+
 	let session: Awaited<ReturnType<typeof startQrLogin>>;
 	try {
 		session = await startQrLogin({
@@ -86,6 +106,12 @@ export async function handleQrCommand(interaction: GatewayInteraction): Promise<
 		});
 		return;
 	}
+
+	liveSessions.set(userId, { cancel: session.cancel, interactionToken: interaction.token });
+	// Dọn khi phiên kết thúc để không giữ tham chiếu.
+	const forget = () => {
+		if (liveSessions.get(userId)?.cancel === session.cancel) liveSessions.delete(userId);
+	};
 
 	const link = `https://discord.com/ra/${session.fingerprint}`;
 
@@ -113,6 +139,7 @@ export async function handleQrCommand(interaction: GatewayInteraction): Promise<
 		failure = error.message;
 		return null;
 	});
+	forget();
 
 	if (!token) {
 		await closeNotice(`Đăng nhập với tư cách <@${userId}> không hoàn tất`);
@@ -120,8 +147,12 @@ export async function handleQrCommand(interaction: GatewayInteraction): Promise<
 			embeds: [
 				{
 					color: AMBER,
-					title: 'Link đã hết hiệu lực',
-					description: `${(failure ?? 'Hết 2 phút chờ xác nhận.').slice(0, 300)}\nChạy lại \`/login\`, hoặc dùng \`/link\` nếu cần ngay.`,
+					title: 'Link không dùng được nữa',
+					description: [
+						(failure ?? 'Link đã hết hạn.').slice(0, 300),
+						'Mỗi lần \`/login\` chỉ giữ một link sống; bấm vào link của tin nhắn cũ sẽ ra trang "không tìm thấy thiết bị".',
+						'Chạy lại \`/login\` để lấy link mới.',
+					].join('\n'),
 				},
 			],
 		});
