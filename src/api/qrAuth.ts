@@ -29,6 +29,8 @@ export interface QrLogin {
 	ip: string | null;
 	/** Đi trực tiếp hay qua proxy nào. */
 	ipNote: string;
+	/** IP khi đi thẳng, luôn có để so sánh. */
+	directIp: string | null;
 	/** Ảnh QR dạng PNG. */
 	png: Buffer;
 	/** Token khi người dùng xác nhận xong. */
@@ -136,6 +138,7 @@ async function exchangeTicket(ticket: string): Promise<ExchangeOutcome> {
 
 	let captcha = false;
 	let lastError = '';
+	let proxyNetworkErrors = 0;
 
 	for (const [index, attempt] of attempts.entries()) {
 		try {
@@ -176,11 +179,19 @@ async function exchangeTicket(ticket: string): Promise<ExchangeOutcome> {
 			lastError = `${res.status}: ${text.slice(0, 120)}`;
 		} catch (error) {
 			lastError = (error as Error).message;
+			if (attempt.proxy) proxyNetworkErrors += 1;
 		}
 
 		if (index === 0 && attempts.length > 1) {
 			// Đổi vân tay rồi thử lại ngay, không cần chờ.
 		}
+	}
+
+	if (attempts.some((attempt) => attempt.proxy) && proxyNetworkErrors === attempts.filter((a) => a.proxy).length) {
+		return {
+			error: `Không kết nối được proxy nào trong danh sách (${proxyNetworkErrors} lần), nên vẫn đi thẳng và bị Discord chặn. Kiểm tra cổng proxy có mở từ máy chủ này không.`,
+			captcha,
+		};
 	}
 
 	if (captcha && proxies.length === 0) {
@@ -372,15 +383,30 @@ export async function startQrLogin(
 	// Ghi lại IP đi ra để hiển thị cùng mã QR: captcha của Discord phụ thuộc IP.
 	const { loadProxies } = await import('../core/proxies');
 	const proxies = await loadProxies().catch(() => []);
-	const direct = await egressIp();
-	let ip = direct;
-	let ipNote = 'trực tiếp';
-	if (!ip && proxies[0]) {
-		ip = await egressIp(proxies[0].url);
-		if (ip) ipNote = proxies[0].label;
+
+	// Luôn hỏi cả hai đường: đi thẳng và qua proxy đầu tiên còn sống, để người dùng
+	// thấy được Discord đang nhìn thấy IP nào.
+	const directIp = await egressIp();
+	let proxyIp: string | null = null;
+	let proxyLabel = '';
+	for (const entry of proxies.slice(0, 3)) {
+		const candidate = await egressIp(entry.url);
+		if (candidate) {
+			proxyIp = candidate;
+			proxyLabel = entry.label;
+			break;
+		}
 	}
 
-	return { fingerprint, png, ip, ipNote, wait: tokenWait, cancel: stop };
+	return {
+		fingerprint,
+		png,
+		ip: proxyIp ?? directIp,
+		ipNote: proxyIp ? proxyLabel : directIp ? 'trực tiếp' : 'không xác định',
+		directIp,
+		wait: tokenWait,
+		cancel: stop,
+	};
 }
 
 /** Vẽ QR dạng chữ để in thẳng trong terminal. */

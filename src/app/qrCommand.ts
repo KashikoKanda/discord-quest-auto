@@ -65,7 +65,9 @@ export async function handleQrCommand(interaction: GatewayInteraction): Promise<
 					].join('\n'),
 					image: { url: 'attachment://discord-qr.png' },
 					footer: {
-						text: `IP phiên: ${session.ip ?? 'không xác định'} (${session.ipNote}) · không chia sẻ mã này cho ai`,
+						text: `IP: ${session.ip ?? 'không xác định'} (${session.ipNote}) · đi thẳng: ${
+							session.directIp ?? '?'
+						} · không chia sẻ mã này`,
 					},
 				},
 			],
