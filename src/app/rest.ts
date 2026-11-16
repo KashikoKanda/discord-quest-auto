@@ -1,5 +1,6 @@
 /** REST thuần cho bot: danh tính, slash command, trả lời interaction. */
 import { redact } from '../core/redact';
+import { logger } from '../core/logger';
 
 const API = 'https://discord.com/api/v10';
 
@@ -75,7 +76,11 @@ export async function editOriginal(
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify(body),
 	});
-	if (!res.ok) return null;
+	if (!res.ok) {
+		const detail = await res.text().catch(() => '');
+		logger.warn(`Sửa tin nhắn gốc lỗi ${res.status}: ${redact(detail).slice(0, 200)}`);
+		return null;
+	}
 	return (await res.json().catch(() => null)) as Record<string, unknown> | null;
 }
 

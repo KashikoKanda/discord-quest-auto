@@ -12,6 +12,7 @@ import crypto from 'node:crypto';
 import WebSocket from 'ws';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import QRCode from 'qrcode';
+import { logger } from '../core/logger';
 
 const WS_URL = 'wss://remote-auth-gateway.discord.gg/?v=2';
 const LOGIN_URL = 'https://discord.com/api/v9/users/@me/remote-auth/login';
@@ -319,6 +320,8 @@ export async function startQrLogin(
 			} catch {
 				return;
 			}
+
+			logger.info(`remote-auth ← ${String(message.op)}`);
 
 			switch (message.op) {
 				case 'hello': {

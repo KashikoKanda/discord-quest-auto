@@ -12,69 +12,138 @@ import { getDiscordProfile } from '../api/client';
 import { tokenIdFor } from '../core/config';
 import { logger } from '../core/logger';
 
+const BLURPLE = 0x5865f2;
+const AMBER = 0xfaa61a;
+const GREEN = 0x57f287;
+const RED = 0xed4245;
+
 export async function handleQrCommand(interaction: GatewayInteraction): Promise<void> {
 	const userId = interaction.member?.user.id ?? interaction.user?.id ?? '';
-
 	const { startQrLogin } = await import('../api/qrAuth');
 
-	/** Nút mở link đăng nhập; gán lại sau khi có fingerprint. */
-	let loginButton: Record<string, unknown>[] = [];
+	/** Nút mở link đăng nhập, có sau khi biết fingerprint. */
+	let button: Record<string, unknown>[] = [];
+	/** Tên tài khoản đã xác nhận trên app, dùng khi trạng thái quét tới sớm. */
+	let scanned: string | null = null;
 
-	await editOriginal(interaction.token, { content: 'Hãy chờ' });
+	const waiting = async () =>
+		editOriginal(interaction.token, {
+			embeds: [
+				{
+					color: BLURPLE,
+					title: 'Đăng nhập tài khoản',
+					description: '⏳ Hãy chờ trong giây lát…',
+				},
+			],
+		});
+
+	const showScanned = async () =>
+		editOriginal(interaction.token, {
+			embeds: [
+				{
+					color: AMBER,
+					title: '🔐 Đang đăng nhập',
+					description: `${scanned ? `**${scanned}**` : '**User**'} đã xác nhận, đang lấy token…`,
+				},
+			],
+			components: button,
+		});
+
+	await waiting();
 
 	let session: Awaited<ReturnType<typeof startQrLogin>>;
 	try {
 		session = await startQrLogin({
 			onScanned: (username) => {
-				editOriginal(interaction.token, {
-					content: username ? `**${username}** Đang đăng nhập` : '**User** Đang đăng nhập',
-					components: loginButton,
-				}).catch(() => undefined);
+				// Có thể tới trước cả lúc tin nhắn kịp hiện nút; giữ lại để áp sau.
+				scanned = username ?? 'User';
+				if (button.length > 0) showScanned().catch(() => undefined);
 			},
 		});
 	} catch (error) {
 		await editOriginal(interaction.token, {
-			content: `Không mở được phiên đăng nhập: ${(error as Error).message.slice(0, 300)}`,
+			embeds: [
+				{
+					color: RED,
+					title: '❌ Không mở được phiên đăng nhập',
+					description: (error as Error).message.slice(0, 300),
+				},
+			],
 		});
 		return;
 	}
 
 	const link = `https://discord.com/ra/${session.fingerprint}`;
-	loginButton = [
+
+	button = [
 		{
 			type: 1,
 			components: [{ type: 2, style: 5, label: 'Đăng nhập', emoji: { name: '🔐' }, url: link }],
 		},
 	];
 
-	// Chỉ gửi nút, không kèm mô tả.
-	await editOriginal(interaction.token, { content: '', components: loginButton });
+	await editOriginal(interaction.token, {
+		embeds: [
+			{
+				color: BLURPLE,
+				title: '🔐 Đăng nhập Discord',
+				description: [
+					'Bấm **Đăng nhập**, xác nhận trong app là xong.',
+					`-# Link hết hạn sau 2 phút · IP ${session.ip ?? 'không xác định'} (${session.ipNote})`,
+				].join('\n'),
+			},
+		],
+		components: button,
+	});
+
+	// Nếu người dùng xác nhận trước khi nút kịp hiện, cập nhật lại cho khớp trạng thái.
+	if (scanned) await showScanned().catch(() => undefined);
 
 	let failure: string | null = null;
 	const token = await session.wait.catch((error: Error) => {
-		logger.warn(`QR đăng nhập thất bại: ${error.message}`);
+		logger.warn(`Đăng nhập thất bại: ${error.message}`);
 		failure = error.message;
 		return null;
 	});
 
 	if (!token) {
 		await editOriginal(interaction.token, {
-			content: `${(failure ?? 'Link đã hết hiệu lực.').slice(0, 400)}\nDùng \`/link\` dán token nếu cần ngay.`,
+			embeds: [
+				{
+					color: AMBER,
+					title: 'Link đã hết hiệu lực',
+					description: `${(failure ?? 'Hết 2 phút chờ xác nhận.').slice(0, 300)}\nChạy lại \`/login\`, hoặc dùng \`/link\` nếu cần ngay.`,
+				},
+			],
 		});
 		return;
 	}
 
+	let username = 'tài khoản';
 	try {
 		const profile = (await getDiscordProfile(token, tokenIdFor(token))) as { user: Record<string, any> };
-		const username = String(profile.user.username ?? 'tài khoản');
-		const profileUserId = String(profile.user.id ?? '');
-		linkAccount(userId, token, username, profileUserId);
-		await editOriginal(interaction.token, {
-			content: `Đã liên kết **${username}**. Thử \`/quests\` hoặc \`/hidden\`.`,
-		});
+		username = String(profile.user.username ?? 'tài khoản');
+		linkAccount(userId, token, username, String(profile.user.id ?? ''));
 	} catch (error) {
 		await editOriginal(interaction.token, {
-			content: `Đã lấy token nhưng không kiểm tra được tài khoản: ${(error as Error).message.slice(0, 300)}`,
+			embeds: [
+				{
+					color: RED,
+					title: 'Đã lấy token nhưng chưa kiểm tra được tài khoản',
+					description: (error as Error).message.slice(0, 300),
+				},
+			],
 		});
+		return;
 	}
+
+	await editOriginal(interaction.token, {
+		embeds: [
+			{
+				color: GREEN,
+				title: '✅ Đăng nhập thành công',
+				description: `Đang dùng **${username}**.\nThử \`/quests\` hoặc \`/hidden\`.`,
+			},
+		],
+	});
 }
