@@ -344,6 +344,7 @@ async function main(): Promise<void> {
 		});
 		logger.plain(await qrToTerminal(session.fingerprint));
 		logger.info(`Hoặc mở: https://discord.com/ra/${session.fingerprint}`);
+		logger.plain(`  IP phiên  ${session.ip ?? 'không xác định'} (${session.ipNote})`);
 		logger.info('Chờ tối đa 2 phút...');
 
 		const token = await session.wait.catch((error: Error) => {

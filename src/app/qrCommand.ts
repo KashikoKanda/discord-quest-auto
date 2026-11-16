@@ -64,7 +64,9 @@ export async function handleQrCommand(interaction: GatewayInteraction): Promise<
 						`Mã hết hạn sau 2 phút. Hoặc mở: https://discord.com/ra/${session.fingerprint}`,
 					].join('\n'),
 					image: { url: 'attachment://discord-qr.png' },
-					footer: { text: 'Không chia sẻ mã này cho ai' },
+					footer: {
+						text: `IP phiên: ${session.ip ?? 'không xác định'} (${session.ipNote}) · không chia sẻ mã này cho ai`,
+					},
 				},
 			],
 			attachments: [{ id: 0, filename: 'discord-qr.png', description: 'Mã QR đăng nhập Discord' }],

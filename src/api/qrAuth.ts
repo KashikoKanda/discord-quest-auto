@@ -25,6 +25,10 @@ export interface QrHandlers {
 
 export interface QrLogin {
 	fingerprint: string;
+	/** IP mà phiên QR đang đi ra (để biết vì sao Discord đòi captcha). */
+	ip: string | null;
+	/** Đi trực tiếp hay qua proxy nào. */
+	ipNote: string;
 	/** Ảnh QR dạng PNG. */
 	png: Buffer;
 	/** Token khi người dùng xác nhận xong. */
@@ -188,6 +192,23 @@ async function exchangeTicket(ticket: string): Promise<ExchangeOutcome> {
 	return { error: lastError || 'Không đổi được mã QR thành token', captcha };
 }
 
+/** IP mà máy này đi ra internet, hoặc null nếu không biết. */
+async function egressIp(proxyUrl?: string): Promise<string | null> {
+	try {
+		const init: Record<string, unknown> = { signal: AbortSignal.timeout(6000) };
+		if (proxyUrl) {
+			const { ProxyAgent, fetch: undiciFetch } = await import('undici');
+			(init as any).dispatcher = new ProxyAgent(proxyUrl);
+			const res = (await undiciFetch('https://api.ipify.org?format=json', init as any)) as unknown as Response;
+			return res.ok ? (((await res.json()) as { ip?: string }).ip ?? null) : null;
+		}
+		const res = await fetch('https://api.ipify.org?format=json', init as any);
+		return res.ok ? (((await res.json()) as { ip?: string }).ip ?? null) : null;
+	} catch {
+		return null;
+	}
+}
+
 /** Mở một phiên QR và chờ token. */
 export async function startQrLogin(
 	handlers: QrHandlers = {},
@@ -347,7 +368,19 @@ export async function startQrLogin(
 	});
 
 	const { fingerprint, png } = await ready;
-	return { fingerprint, png, wait: tokenWait, cancel: stop };
+
+	// Ghi lại IP đi ra để hiển thị cùng mã QR: captcha của Discord phụ thuộc IP.
+	const { loadProxies } = await import('../core/proxies');
+	const proxies = await loadProxies().catch(() => []);
+	const direct = await egressIp();
+	let ip = direct;
+	let ipNote = 'trực tiếp';
+	if (!ip && proxies[0]) {
+		ip = await egressIp(proxies[0].url);
+		if (ip) ipNote = proxies[0].label;
+	}
+
+	return { fingerprint, png, ip, ipNote, wait: tokenWait, cancel: stop };
 }
 
 /** Vẽ QR dạng chữ để in thẳng trong terminal. */
