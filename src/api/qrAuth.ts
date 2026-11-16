@@ -10,6 +10,7 @@
 
 import crypto from 'node:crypto';
 import WebSocket from 'ws';
+import { HttpsProxyAgent } from 'https-proxy-agent';
 import QRCode from 'qrcode';
 
 const WS_URL = 'wss://remote-auth-gateway.discord.gg/?v=2';
@@ -113,7 +114,7 @@ interface ExchangeOutcome {
  * Đổi ticket lấy token. Discord hay đòi captcha khi request tới từ IP máy chủ,
  * nên thử lần lượt vài kiểu vân tay trình duyệt rồi tới proxy nếu có.
  */
-async function exchangeTicket(ticket: string): Promise<ExchangeOutcome> {
+async function exchangeTicket(ticket: string, pinnedProxy?: string): Promise<ExchangeOutcome> {
 	const { loadProxies } = await import('../core/proxies');
 	const variants = [
 		{
@@ -131,10 +132,13 @@ async function exchangeTicket(ticket: string): Promise<ExchangeOutcome> {
 	];
 
 	const proxies = await loadProxies().catch(() => []);
-	const attempts: { ua: string; chrome: string; proxy?: string }[] = variants.map((variant) => ({ ...variant }));
-	for (const proxy of proxies.slice(0, 3)) {
-		attempts.push({ ...variants[0], proxy: proxy.url });
-	}
+	// Phiên QR đã chọn proxy thì đi đúng proxy đó, không lén quay về IP máy chủ.
+	const attempts: { ua: string; chrome: string; proxy?: string }[] = pinnedProxy
+		? variants.map((variant) => ({ ...variant, proxy: pinnedProxy }))
+		: [
+				...variants.map((variant) => ({ ...variant })),
+				...proxies.slice(0, 3).map((proxy) => ({ ...variants[0], proxy: proxy.url })),
+			];
 
 	let captcha = false;
 	let lastError = '';
@@ -223,12 +227,42 @@ async function egressIp(proxyUrl?: string): Promise<string | null> {
 /** Mở một phiên QR và chờ token. */
 export async function startQrLogin(
 	handlers: QrHandlers = {},
-	userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/138.0.0.0 Safari/537.36',
+	options: { proxy?: string; userAgent?: string } = {},
 ): Promise<QrLogin> {
+	const userAgent =
+		options.userAgent ??
+		'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/138.0.0.0 Safari/537.36';
 	const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
 	const encodedPublicKey = publicKey.export({ type: 'spki', format: 'der' }).toString('base64');
 
+	// Chọn proxy trước khi mở WebSocket: phiên QR phải đi cùng IP với lúc đổi ticket,
+	// nếu không Discord thấy hai IP khác nhau và đòi captcha.
+	const { loadProxies } = await import('../core/proxies');
+	const proxies = options.proxy
+		? [{ url: options.proxy, label: options.proxy.replace(/:[^:@/]+@?[^:@/]*$/, ':***'), country: null }]
+		: await loadProxies().catch(() => []);
+	const directIp = await egressIp();
+	let proxyUrl: string | undefined;
+	let proxyIp: string | null = null;
+	let proxyLabel = '';
+	for (const entry of proxies.slice(0, 3)) {
+		const candidate = await egressIp(entry.url);
+		if (candidate) {
+			proxyUrl = entry.url;
+			proxyIp = candidate;
+			proxyLabel = entry.label;
+			break;
+		}
+	}
+
+	if (options.proxy && !proxyUrl) {
+		throw new Error(`Không kết nối được proxy ${options.proxy.replace(/\/\/[^@]*@/, '//')} (cổng bị chặn?)`);
+	}
+
+	const agent = proxyUrl ? new HttpsProxyAgent(proxyUrl, { timeout: 20_000 }) : undefined;
+
 	const ws = new WebSocket(WS_URL, {
+		agent,
 		origin: 'https://discord.com',
 		headers: {
 			'User-Agent': userAgent,
@@ -347,7 +381,7 @@ export async function startQrLogin(
 					try {
 						const ticket = String(message.ticket ?? '');
 						if (!ticket) throw new Error('Thiếu ticket');
-						const outcome = await exchangeTicket(ticket);
+						const outcome = await exchangeTicket(ticket, proxyUrl);
 						if (outcome.token) {
 							resolveToken(decrypt(privateKey, outcome.token).toString('utf8'));
 						} else {
@@ -381,23 +415,6 @@ export async function startQrLogin(
 	const { fingerprint, png } = await ready;
 
 	// Ghi lại IP đi ra để hiển thị cùng mã QR: captcha của Discord phụ thuộc IP.
-	const { loadProxies } = await import('../core/proxies');
-	const proxies = await loadProxies().catch(() => []);
-
-	// Luôn hỏi cả hai đường: đi thẳng và qua proxy đầu tiên còn sống, để người dùng
-	// thấy được Discord đang nhìn thấy IP nào.
-	const directIp = await egressIp();
-	let proxyIp: string | null = null;
-	let proxyLabel = '';
-	for (const entry of proxies.slice(0, 3)) {
-		const candidate = await egressIp(entry.url);
-		if (candidate) {
-			proxyIp = candidate;
-			proxyLabel = entry.label;
-			break;
-		}
-	}
-
 	return {
 		fingerprint,
 		png,

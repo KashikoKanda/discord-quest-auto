@@ -45,6 +45,7 @@ Tuỳ chọn
   --reload         (proxy) tải lại danh sách ngay
   --test[=số]      (proxy) thử proxy thật, đo IP và nước (mặc định 5)
   --image[=tệp]    (hidden) xuất ảnh lưới quest ẩn ra tệp PNG
+  --proxy=<url>    (qr) đi qua một proxy cụ thể
   --country=<cc>   (hidden) mã quốc gia để đối chiếu vùng (mặc định VN)
   --log=<file>     ghi log ra file
   --gap=<giây>     nghỉ tối thiểu giữa hai quest (mặc định 10)
@@ -334,14 +335,25 @@ async function main(): Promise<void> {
 		const { startQrLogin, qrToTerminal } = await import('./src/api/qrAuth');
 		logger.header('Đăng nhập bằng QR', 'mở app Discord trên điện thoại để quét');
 
-		const session = await startQrLogin({
-			onScanned: (username) =>
-				logger.info(
-					username
-						? `Đã quét bởi ${username}, xác nhận trên điện thoại.`
-						: 'Đã quét, xác nhận trên điện thoại.',
-				),
+		const chosen = flag('proxy');
+		const session = await startQrLogin(
+			{
+				onScanned: (username) =>
+					logger.info(
+						username
+							? `Đã quét bởi ${username}, xác nhận trên điện thoại.`
+							: 'Đã quét, xác nhận trên điện thoại.',
+					),
+			},
+			chosen ? { proxy: chosen } : {},
+		).catch((error: Error) => {
+			logger.error(error.message);
+			return null;
 		});
+		if (!session) {
+			process.exitCode = 1;
+			return;
+		}
 		logger.plain(await qrToTerminal(session.fingerprint));
 		logger.info(`Hoặc mở: https://discord.com/ra/${session.fingerprint}`);
 		logger.plain(`  IP phiên  ${session.ip ?? 'không xác định'} (${session.ipNote})`);
