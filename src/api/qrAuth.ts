@@ -53,23 +53,139 @@ async function qrPng(fingerprint: string): Promise<Buffer> {
 	});
 }
 
-async function exchangeTicket(ticket: string, userAgent: string): Promise<string> {
-	const res = await fetch(LOGIN_URL, {
-		method: 'POST',
-		headers: {
-			'Content-Type': 'application/json',
-			'User-Agent': userAgent,
-			Origin: 'https://discord.com',
-			Referer: 'https://discord.com/',
+/** Header giống client web thật: Discord chấm điểm request trần là bot và đòi captcha. */
+function browserHeaders(userAgent: string, chrome: string): Record<string, string> {
+	const superProps = Buffer.from(
+		JSON.stringify({
+			os: 'Windows',
+			browser: 'Discord Client',
+			release_channel: 'stable',
+			client_version: '1.0.9236',
+			os_version: '10.0.22631',
+			os_arch: 'x64',
+			app_arch: 'x64',
+			system_locale: 'en-US',
+			has_client_mods: false,
+			client_launch_id: crypto.randomUUID(),
+			browser_user_agent: userAgent,
+			browser_version: chrome,
+			os_sdk_version: '22631',
+			client_build_number: 539951,
+			native_build_number: 81687,
+			client_event_source: null,
+			launch_signature: crypto.randomUUID(),
+			client_heartbeat_session_id: crypto.randomUUID(),
+			client_app_state: 'focused',
+		}),
+	).toString('base64');
+
+	return {
+		'Content-Type': 'application/json',
+		'User-Agent': userAgent,
+		Origin: 'https://discord.com',
+		Referer: 'https://discord.com/',
+		'Accept-Language': 'en-US,en;q=0.9',
+		'x-super-properties': superProps,
+		'x-discord-locale': 'en-US',
+		'x-discord-timezone': 'Asia/Saigon',
+		'sec-ch-ua': `"Chromium";v="${chrome}", "Not(A:Brand";v="24"`,
+		'sec-ch-ua-mobile': '?0',
+		'sec-ch-ua-platform': '"Windows"',
+		'Sec-Fetch-Dest': 'empty',
+		'Sec-Fetch-Mode': 'cors',
+		'Sec-Fetch-Site': 'same-origin',
+	};
+}
+
+interface ExchangeOutcome {
+	token?: string;
+	error?: string;
+	captcha?: boolean;
+}
+
+/**
+ * Đổi ticket lấy token. Discord hay đòi captcha khi request tới từ IP máy chủ,
+ * nên thử lần lượt vài kiểu vân tay trình duyệt rồi tới proxy nếu có.
+ */
+async function exchangeTicket(ticket: string): Promise<ExchangeOutcome> {
+	const { loadProxies } = await import('../core/proxies');
+	const variants = [
+		{
+			ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/158.0.0.0 Safari/537.36',
+			chrome: '158',
 		},
-		body: JSON.stringify({ ticket }),
-		signal: AbortSignal.timeout(20_000),
-	});
-	const text = await res.text();
-	if (!res.ok) throw new Error(`Đổi ticket thất bại (${res.status}): ${text.slice(0, 120)}`);
-	const parsed = JSON.parse(text) as { encrypted_token?: string };
-	if (!parsed.encrypted_token) throw new Error('Discord không trả token');
-	return parsed.encrypted_token;
+		{
+			ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36',
+			chrome: '157',
+		},
+		{
+			ua: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/158.0.0.0 Safari/537.36',
+			chrome: '158',
+		},
+	];
+
+	const proxies = await loadProxies().catch(() => []);
+	const attempts: { ua: string; chrome: string; proxy?: string }[] = variants.map((variant) => ({ ...variant }));
+	for (const proxy of proxies.slice(0, 3)) {
+		attempts.push({ ...variants[0], proxy: proxy.url });
+	}
+
+	let captcha = false;
+	let lastError = '';
+
+	for (const [index, attempt] of attempts.entries()) {
+		try {
+			const init: Record<string, unknown> = {
+				method: 'POST',
+				headers: browserHeaders(attempt.ua, attempt.chrome),
+				body: JSON.stringify({ ticket }),
+				signal: AbortSignal.timeout(20_000),
+			};
+
+			let res: Awaited<ReturnType<typeof fetch>>;
+			if (attempt.proxy) {
+				const { ProxyAgent, fetch: undiciFetch } = await import('undici');
+				(init as any).dispatcher = new ProxyAgent(attempt.proxy);
+				res = (await undiciFetch(LOGIN_URL, init as any)) as unknown as Response;
+			} else {
+				res = await fetch(LOGIN_URL, init as any);
+			}
+
+			const text = await res.text();
+			if (res.ok) {
+				const parsed = JSON.parse(text) as { encrypted_token?: string };
+				if (parsed.encrypted_token) return { token: parsed.encrypted_token };
+				lastError = 'Discord không trả token';
+				continue;
+			}
+
+			if (text.includes('captcha-required') || text.includes('captcha_key')) {
+				captcha = true;
+				lastError = 'Discord đòi captcha';
+				continue;
+			}
+
+			if (text.includes('Invalid remote authentication ticket') || text.includes('20042')) {
+				return { error: 'Mã QR đã hết hiệu lực hoặc đã dùng, chạy lại /qr để lấy mã mới.' };
+			}
+
+			lastError = `${res.status}: ${text.slice(0, 120)}`;
+		} catch (error) {
+			lastError = (error as Error).message;
+		}
+
+		if (index === 0 && attempts.length > 1) {
+			// Đổi vân tay rồi thử lại ngay, không cần chờ.
+		}
+	}
+
+	if (captcha && proxies.length === 0) {
+		return {
+			error: 'Discord chặn IP máy chủ này bằng captcha khi đổi mã QR. Đặt PROXY_LIST_URL (proxy dân dụng) rồi thử lại, hoặc dùng /link để dán token.',
+			captcha: true,
+		};
+	}
+	return { error: lastError || 'Không đổi được mã QR thành token', captcha };
 }
 
 /** Mở một phiên QR và chờ token. */
@@ -199,8 +315,12 @@ export async function startQrLogin(
 					try {
 						const ticket = String(message.ticket ?? '');
 						if (!ticket) throw new Error('Thiếu ticket');
-						const encryptedToken = await exchangeTicket(ticket, userAgent);
-						resolveToken(decrypt(privateKey, encryptedToken).toString('utf8'));
+						const outcome = await exchangeTicket(ticket);
+						if (outcome.token) {
+							resolveToken(decrypt(privateKey, outcome.token).toString('utf8'));
+						} else {
+							rejectToken(new Error(outcome.error ?? 'Không đổi được mã QR thành token'));
+						}
 					} catch (error) {
 						rejectToken(error as Error);
 					}

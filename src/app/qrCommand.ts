@@ -72,8 +72,10 @@ export async function handleQrCommand(interaction: GatewayInteraction): Promise<
 		{ name: 'discord-qr.png', data: session.png },
 	);
 
+	let failure: string | null = null;
 	const token = await session.wait.catch((error: Error) => {
 		logger.warn(`QR đăng nhập thất bại: ${error.message}`);
+		failure = error.message;
 		return null;
 	});
 
@@ -81,9 +83,9 @@ export async function handleQrCommand(interaction: GatewayInteraction): Promise<
 		await editOriginal(interaction.token, {
 			embeds: [
 				{
-					color: 0xfaa61a,
-					title: 'Mã QR hết hiệu lực',
-					description: 'Chạy lại `/qr` để lấy mã mới.',
+					color: 0xed4245,
+					title: 'Chưa lấy được token',
+					description: `${(failure ?? 'Mã QR hết hiệu lực.').slice(0, 400)}\n\nDùng \`/link\` dán token nếu cần ngay.`,
 				},
 			],
 		});
