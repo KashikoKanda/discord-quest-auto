@@ -55,6 +55,12 @@ export const commandDefs = [
 				type: 5,
 				required: false,
 			},
+			{
+				name: 'test',
+				description: 'Thử proxy thật: đo IP, nước, độ trễ',
+				type: 5,
+				required: false,
+			},
 		],
 	},
 	{ name: 'claim', description: 'Nhận thưởng cho quest đã xong', type: 1 },
@@ -376,6 +382,27 @@ async function handleDeferredCommand(interaction: GatewayInteraction, command: C
 						'Proxy · danh sách rỗng',
 						`Nguồn: \`${status.source.url ?? status.source.file}\`\nDanh sách chưa có đầu nào dùng được. Kiểm tra lại nội dung file.`,
 						0xed4245,
+					),
+				],
+			});
+			return;
+		}
+
+		if (option(interaction, 'test')) {
+			const { testProxies } = await import('../core/proxies');
+			const results = await testProxies(5);
+			const lines = results.map((result) =>
+				result.ok
+					? `✔ \`${result.label}\` → ${result.ip} · ${result.country ?? '?'} · ${result.ms}ms`
+					: `✖ \`${result.label}\` → ${result.error} · ${result.ms}ms`,
+			);
+			const good = results.filter((result) => result.ok).length;
+			await editOriginal(interaction.token, {
+				embeds: [
+					embed(
+						`Proxy · ${good}/${results.length} sống`,
+						lines.join('\n') || 'Danh sách rỗng.',
+						good === results.length && good > 0 ? 0x57f287 : 0xfaa61a,
 					),
 				],
 			});

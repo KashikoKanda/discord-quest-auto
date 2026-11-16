@@ -42,6 +42,7 @@ Tuỳ chọn
   --json           (list/hidden) in JSON
   --enroll=<id>    (hidden) nhận một quest ẩn để đưa vào lượt chạy
   --reload         (proxy) tải lại danh sách ngay
+  --test[=số]      (proxy) thử proxy thật, đo IP và nước (mặc định 5)
   --image[=tệp]    (hidden) xuất ảnh lưới quest ẩn ra tệp PNG
   --country=<cc>   (hidden) mã quốc gia để đối chiếu vùng (mặc định VN)
   --log=<file>     ghi log ra file
@@ -306,7 +307,25 @@ async function main(): Promise<void> {
 		const parts = status.countries.map((item) => `${item.code} ${item.count}`);
 		if (status.untagged > 0) parts.push(`không thẻ ${status.untagged}`);
 		logger.plain(`  quốc gia ${parts.join(' · ')}`);
-		logger.info('Tải lại ngay: npm start proxy --reload');
+
+		if (has('test') || flag('test')) {
+			const { testProxies } = await import('./src/core/proxies');
+			const limit = Math.max(1, Math.min(20, Number(flag('test')) || 5));
+			logger.info(`Thử ${limit} proxy đầu...`);
+			const results = await testProxies(limit);
+			for (const result of results) {
+				if (result.ok) {
+					logger.plain(`  ✔ ${result.label}  ${result.ip}  ${result.country ?? '?'}  ${result.ms}ms`);
+				} else {
+					logger.plain(`  ✖ ${result.label}  ${result.error}  ${result.ms}ms`);
+				}
+			}
+			const good = results.filter((result) => result.ok).length;
+			logger.info(`${good}/${results.length} proxy sống.`);
+			return;
+		}
+
+		logger.info('Tải lại ngay: npm start proxy --reload · Thử proxy: npm start proxy --test');
 		return;
 	}
 

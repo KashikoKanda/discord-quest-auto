@@ -220,3 +220,63 @@ export async function proxyStatus(force = false): Promise<ProxyStatus> {
 		empty: (Boolean(source.url) || Boolean(source.file)) && entries.length === 0,
 	};
 }
+
+export interface ProxyTestResult {
+	ok: boolean;
+	label: string;
+	ip?: string;
+	country?: string;
+	ms: number;
+	error?: string;
+}
+
+/** Thử một proxy: đo độ trễ, lấy IP ra và nước của IP đó. */
+export async function testProxy(entry: ProxyEntry): Promise<ProxyTestResult> {
+	const started = Date.now();
+	try {
+		const { ProxyAgent, fetch: undiciFetch } = await import('undici');
+		const dispatcher = new ProxyAgent(entry.url);
+		const client = (url: string) =>
+			undiciFetch(url, {
+				dispatcher,
+				headers: { 'User-Agent': 'discord-quest-auto', Accept: 'application/json' },
+				signal: AbortSignal.timeout(15_000),
+			});
+
+		const ipRes = await client('https://api.ipify.org?format=json');
+		if (!ipRes.ok) throw new Error(`ipify trả ${ipRes.status}`);
+		const ip = ((await ipRes.json()) as { ip?: string }).ip ?? '';
+		const ms = Date.now() - started;
+
+		// Tra nước là phần phụ, chậm quá thì bỏ để không kéo dài thời gian chờ.
+		let country: string | undefined;
+		try {
+			const geo = await undiciFetch('http://ip-api.com/json/?fields=countryCode', {
+				dispatcher,
+				signal: AbortSignal.timeout(6000),
+			});
+			if (geo.ok) country = ((await geo.json()) as { countryCode?: string }).countryCode;
+		} catch {
+			/* không tra được nước thì thôi, IP là đủ để biết proxy sống */
+		}
+
+		return { ok: true, label: entry.label, ip, country, ms };
+	} catch (error) {
+		return {
+			ok: false,
+			label: entry.label,
+			ms: Date.now() - started,
+			error: error instanceof Error ? error.message : String(error),
+		};
+	}
+}
+
+/** Thử lần lượt vài proxy đầu danh sách. */
+export async function testProxies(limit = 5): Promise<ProxyTestResult[]> {
+	const entries = await loadProxies().catch(() => []);
+	const results: ProxyTestResult[] = [];
+	for (const entry of entries.slice(0, limit)) {
+		results.push(await testProxy(entry));
+	}
+	return results;
+}

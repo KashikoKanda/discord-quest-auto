@@ -208,19 +208,19 @@ npm run bot
 On first start the bot publishes its commands globally and prints its own tag when the
 gateway is ready.
 
-| Command        | What it does                                                  |
-| :------------- | :------------------------------------------------------------ |
-| `/link`        | Opens a private form; paste the account token there           |
-| `/quests`      | Quest list with type, state and progress bars                 |
-| `/hidden`      | Hidden quests one card at a time: back, enrol, next |
-| `/proxy`       | Proxy list health; `/proxy reload:true` refetches it          |
-| `/run [quest]` | Complete quests, progress streams into the reply              |
-| `/stop`        | Stop the current run                                          |
-| `/claim`       | Claim rewards for finished quests                             |
-| `/status`      | Engine state, progress and the latest log lines               |
-| `/auto`        | Scan every 30 minutes on its own                              |
-| `/unlink`      | Forget the linked account                                     |
-| `/help`        | Command overview                                              |
+| Command        | What it does                                         |
+| :------------- | :--------------------------------------------------- |
+| `/link`        | Opens a private form; paste the account token there  |
+| `/quests`      | Quest list with type, state and progress bars        |
+| `/hidden`      | Hidden quests one card at a time: back, enrol, next  |
+| `/proxy`       | Proxy list health; `/proxy reload:true` refetches it |
+| `/run [quest]` | Complete quests, progress streams into the reply     |
+| `/stop`        | Stop the current run                                 |
+| `/claim`       | Claim rewards for finished quests                    |
+| `/status`      | Engine state, progress and the latest log lines      |
+| `/auto`        | Scan every 30 minutes on its own                     |
+| `/unlink`      | Forget the linked account                            |
+| `/help`        | Command overview                                     |
 
 Every reply is private to the person who ran the command. Tokens live in
 `.quest-bot.json` (mode `600`, git-ignored) and are never echoed back; the bot never
