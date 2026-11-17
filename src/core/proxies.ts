@@ -37,10 +37,12 @@ function refreshMs(): number {
 }
 
 /** Nguồn danh sách: ưu tiên URL, sau đó file cục bộ. */
-export function proxySource(): { url?: string; file?: string } {
+export function proxySource(): { url?: string; file?: string; inline?: string } {
 	return {
 		url: process.env.PROXY_LIST_URL?.trim() || undefined,
 		file: process.env.PROXY_LIST_FILE?.trim() || undefined,
+		// Dán thẳng danh sách vào biến môi trường: tiện khi host không có ổ đĩa.
+		inline: process.env.PROXY_LIST?.trim() || undefined,
 	};
 }
 
@@ -144,6 +146,15 @@ export async function loadProxies(force = false): Promise<ProxyEntry[]> {
 	if (!force && memory && Date.now() - memory.at < refreshMs()) return memory.entries;
 
 	const source = proxySource();
+
+	// Danh sách dán thẳng vào biến môi trường thì dùng luôn, phân tách bằng xuống dòng.
+	if (source.inline) {
+		const entries = parseProxyList(source.inline.replace(/\\n/g, '\n'));
+		memory = { at: Date.now(), entries };
+		writeDisk(entries);
+		return entries;
+	}
+
 	if (!source.url && !source.file) {
 		const disk = readDisk();
 		memory = { at: Date.now(), entries: disk?.entries ?? [] };

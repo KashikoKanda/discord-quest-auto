@@ -296,11 +296,15 @@ async function main(): Promise<void> {
 		const source = proxySource();
 
 		logger.header('Proxy', `${status.count} đầu`);
-		if (!source.url && !source.file) {
-			logger.info('Chưa cấu hình nguồn. Đặt PROXY_LIST_URL (raw GitHub) hoặc PROXY_LIST_FILE trong .env.');
+		if (!source.url && !source.file && !source.inline) {
+			logger.info(
+				'Chưa cấu hình nguồn. Đặt PROXY_LIST_URL (raw GitHub), PROXY_LIST_FILE, hoặc PROXY_LIST (dán thẳng) trong .env.',
+			);
 			return;
 		}
-		logger.plain(`  nguồn   ${source.url ?? source.file}`);
+		logger.plain(
+			`  nguồn   ${source.url ?? source.file ?? (source.inline ? 'PROXY_LIST (biến môi trường)' : 'chưa có')}`,
+		);
 		logger.plain(`  tải lúc ${status.loadedAt ? new Date(status.loadedAt).toLocaleString() : 'chưa'}`);
 		if (status.count === 0) {
 			logger.warn('Danh sách rỗng. Kiểm tra lại URL hoặc định dạng từng dòng.');
