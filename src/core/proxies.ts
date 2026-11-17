@@ -232,6 +232,51 @@ export async function proxyStatus(force = false): Promise<ProxyStatus> {
 	};
 }
 
+/** Nhớ lại proxy nào đã chạy được với kiểu kết nối nào. */
+const resolvedUrls = new Map<string, string>();
+
+/** Đổi http↔https, vì nhiều nhà cung cấp ghi https nhưng gate chỉ nói http. */
+export function alternateProxyUrl(url: string): string | null {
+	if (url.startsWith('https://')) return `http://${url.slice(8)}`;
+	if (url.startsWith('http://')) return `https://${url.slice(7)}`;
+	return null;
+}
+
+async function reachableThrough(url: string): Promise<boolean> {
+	try {
+		const { ProxyAgent, fetch: undiciFetch } = await import('undici');
+		const res = await undiciFetch('https://api.ipify.org?format=json', {
+			dispatcher: new ProxyAgent(url),
+			signal: AbortSignal.timeout(8000),
+		});
+		return res.ok;
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Trả về URL thật sự dùng được cho proxy này. Gate của nhiều nhà cung cấp chỉ
+ * nhận kết nối http thường, nên nếu kiểu ghi trong danh sách hỏng thì thử kiểu kia.
+ */
+export async function resolveProxyUrl(entry: ProxyEntry): Promise<string> {
+	const cached = resolvedUrls.get(entry.url);
+	if (cached) return cached;
+
+	if (await reachableThrough(entry.url)) {
+		resolvedUrls.set(entry.url, entry.url);
+		return entry.url;
+	}
+
+	const alternate = alternateProxyUrl(entry.url);
+	if (alternate && (await reachableThrough(alternate))) {
+		resolvedUrls.set(entry.url, alternate);
+		return alternate;
+	}
+
+	return entry.url;
+}
+
 export interface ProxyTestResult {
 	ok: boolean;
 	label: string;
@@ -246,7 +291,7 @@ export async function testProxy(entry: ProxyEntry): Promise<ProxyTestResult> {
 	const started = Date.now();
 	try {
 		const { ProxyAgent, fetch: undiciFetch } = await import('undici');
-		const dispatcher = new ProxyAgent(entry.url);
+		const dispatcher = new ProxyAgent(await resolveProxyUrl(entry));
 		const client = (url: string) =>
 			undiciFetch(url, {
 				dispatcher,

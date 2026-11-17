@@ -116,7 +116,7 @@ interface ExchangeOutcome {
  * nên thử lần lượt vài kiểu vân tay trình duyệt rồi tới proxy nếu có.
  */
 async function exchangeTicket(ticket: string, pinnedProxy?: string): Promise<ExchangeOutcome> {
-	const { loadProxies } = await import('../core/proxies');
+	const { loadProxies, resolveProxyUrl } = await import('../core/proxies');
 	const variants = [
 		{
 			ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/158.0.0.0 Safari/537.36',
@@ -247,9 +247,11 @@ export async function startQrLogin(
 	let proxyIp: string | null = null;
 	let proxyLabel = '';
 	for (const entry of proxies.slice(0, 3)) {
-		const candidate = await egressIp(entry.url);
+		// Gate nhiều nhà cung cấp chỉ nhận http thường dù danh sách ghi https.
+		const url = await resolveProxyUrl(entry);
+		const candidate = await egressIp(url);
 		if (candidate) {
-			proxyUrl = entry.url;
+			proxyUrl = url;
 			proxyIp = candidate;
 			proxyLabel = entry.label;
 			break;
