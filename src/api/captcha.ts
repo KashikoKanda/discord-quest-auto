@@ -17,6 +17,8 @@ export interface CaptchaChallenge {
 	/** Tham số hCaptcha Discord gửi kèm, phải chuyển lại khi giải. */
 	rqdata?: string;
 	rqtoken?: string;
+	/** Discord cần gửi lại y hệt khi nộp token. */
+	sessionId?: string;
 }
 
 /** Đọc phần captcha trong body lỗi của Discord. */
@@ -26,19 +28,22 @@ export function parseCaptcha(body: string): CaptchaChallenge | null {
 			captcha_sitekey?: string;
 			captcha_rqdata?: string;
 			captcha_rqtoken?: string;
+			captcha_session_id?: string;
 		};
 		if (!data.captcha_sitekey) return null;
 		return {
 			sitekey: data.captcha_sitekey,
 			rqdata: data.captcha_rqdata,
 			rqtoken: data.captcha_rqtoken,
+			sessionId: data.captcha_session_id,
 		};
 	} catch {
 		const sitekey = body.match(/"captcha_sitekey"\s*:\s*"([^"]+)"/)?.[1];
 		if (!sitekey) return null;
 		const rqdata = body.match(/"captcha_rqdata"\s*:\s*"([^"]*)"/)?.[1];
 		const rqtoken = body.match(/"captcha_rqtoken"\s*:\s*"([^"]*)"/)?.[1];
-		return { sitekey, rqdata, rqtoken };
+		const sessionId = body.match(/"captcha_session_id"\s*:\s*"([^"]*)"/)?.[1];
+		return { sitekey, rqdata, rqtoken, sessionId };
 	}
 }
 

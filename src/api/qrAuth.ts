@@ -155,7 +155,9 @@ async function exchangeTicket(
 	let proxyNetworkErrors = 0;
 	/** Token captcha đã giải; giải một lần rồi dùng lại cho các lần thử sau. */
 	let solvedCaptcha: string | null = null;
-	let captchaExtras: { rqdata?: string; rqtoken?: string } = {};
+	/** Đã xin lại captcha một lần vì token bị từ chối. */
+	let captchaRetried = false;
+	let captchaExtras: { rqdata?: string; rqtoken?: string; sessionId?: string } = {};
 
 	for (const [index, attempt] of attempts.entries()) {
 		try {
@@ -196,7 +198,11 @@ async function exchangeTicket(
 					const solved = await onCaptcha(challenge);
 					if (!solved) return { error: 'Không có captcha token', captcha: true, challenge };
 					solvedCaptcha = solved;
-					captchaExtras = { rqdata: challenge.rqdata, rqtoken: challenge.rqtoken };
+					captchaExtras = {
+						rqdata: challenge.rqdata,
+						rqtoken: challenge.rqtoken,
+						sessionId: challenge.sessionId,
+					};
 				}
 
 				// Gửi lại với signal MỚI: signal của lần đầu đã hết hạn trong lúc chờ giải.
@@ -206,9 +212,12 @@ async function exchangeTicket(
 					headers: browserHeaders(attempt.ua, attempt.chrome),
 					body: JSON.stringify({
 						ticket,
-						captcha_key: solvedCaptcha,
+						// Discord nhận captcha_key dạng MẢNG; gửi chuỗi trần sẽ bị
+						// trả về invalid-response dù token đúng.
+						captcha_key: [solvedCaptcha],
 						captcha_rqdata: captchaExtras.rqdata,
 						captcha_rqtoken: captchaExtras.rqtoken,
+						captcha_session_id: captchaExtras.sessionId,
 					}),
 					signal: AbortSignal.timeout(30_000),
 				};
@@ -230,6 +239,16 @@ async function exchangeTicket(
 				}
 
 				logger.warn(`Đổi ticket sau captcha thất bại (${retryRes.status}): ${retryText.slice(0, 160)}`);
+
+				// Token hỏng/hết hạn thì bỏ nó và xin captcha mới, nhưng chỉ một lần,
+				// tránh vòng lặp mở trang liên tục.
+				if (retryText.includes('invalid-response') && !captchaRetried) {
+					captchaRetried = true;
+					solvedCaptcha = null;
+					lastError = 'Captcha token bị từ chối, xin lại';
+					continue;
+				}
+
 				return {
 					error: `Captcha không được chấp nhận (${retryRes.status}): ${retryText.slice(0, 200)}`,
 					captcha: true,
