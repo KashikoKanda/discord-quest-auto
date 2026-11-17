@@ -19,6 +19,8 @@ interface Session {
 	acked: boolean;
 	closed: boolean;
 	reconnects: number;
+	/** Tag của bot khi gateway sẵn sàng, dùng cho /health. */
+	tag: string | null;
 }
 
 const session: Session = {
@@ -32,6 +34,7 @@ const session: Session = {
 	acked: true,
 	closed: false,
 	reconnects: 0,
+	tag: null,
 };
 
 let onInteraction: InteractionHandler = () => {};
@@ -83,6 +86,7 @@ function handleDispatch(type: string, data: Record<string, any>): void {
 		session.resumeUrl = data.resume_gateway_url ?? null;
 		session.reconnects = 0;
 		const tag = data.user?.username ? `${data.user.username}#${data.user.discriminator ?? '0'}` : 'bot';
+		session.tag = tag;
 		logger.success(`Gateway sẵn sàng · ${tag} · ${data.guilds?.length ?? 0} server`);
 		return;
 	}
@@ -171,6 +175,11 @@ export function startGateway(token: string, intents: number, handler: Interactio
 	session.closed = false;
 	onInteraction = handler;
 	connect();
+}
+
+/** Trạng thái kết nối, cho endpoint /health của chế độ giữ thức. */
+export function gatewayStatus(): { connected: boolean; tag: string | null } {
+	return { connected: session.socket?.readyState === 1, tag: session.tag };
 }
 
 export function stopGateway(): void {

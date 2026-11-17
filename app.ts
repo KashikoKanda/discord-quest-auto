@@ -12,8 +12,9 @@ import { loadEnv } from './src/core/config';
 import { logger } from './src/core/logger';
 import { QuestWorker } from './src/worker';
 import { registerCommands, setBotToken, getMe } from './src/app/rest';
-import { startGateway, stopGateway } from './src/app/gateway';
+import { gatewayStatus, startGateway, stopGateway } from './src/app/gateway';
 import { handleInteraction, commandDefs } from './src/app/commands';
+import { startKeepAlive } from './src/app/keepAlive';
 import { allAccounts, storePath } from './src/app/store';
 import { clearMarker, markTokenRejected, rejectedBefore } from './src/app/health';
 import { tokenFingerprint } from './src/core/redact';
@@ -66,6 +67,9 @@ async function main(): Promise<void> {
 	}
 	logger.info(`Đã nạp ${linked.length} tài khoản từ ${storePath()}.`);
 
+	// Gói miễn phí của Render ngủ nếu không có request; cổng /health tự gọi lại giữ bot thức.
+	const keepAlive = startKeepAlive({ status: gatewayStatus });
+
 	startGateway(token, INTENTS, (interaction) => {
 		handleInteraction(interaction).catch((error: Error) => {
 			logger.error(`Interaction lỗi: ${error.message}`);
@@ -108,6 +112,7 @@ async function main(): Promise<void> {
 	const shutdown = (signal: string) => {
 		logger.warn(`Nhận ${signal}, đang dừng bot...`);
 		clearInterval(auto);
+		keepAlive?.stop();
 		stopGateway();
 		setTimeout(() => process.exit(0), 300);
 	};
