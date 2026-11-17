@@ -94,10 +94,13 @@ async function main(): Promise<void> {
 			logger.warn('Có cấu hình proxy nhưng danh sách rỗng.');
 			return;
 		}
-		const first = entries[0];
-		const result = await testProxy(first);
-		if (result.ok) logger.success(`Proxy ${result.country ?? '?'} ${result.ip} · ${result.ms}ms (${first.label})`);
-		else logger.warn(`Proxy ${first.label} không dùng được: ${result.error}`);
+		// Thử tối đa ba đầu để thấy ngay đầu nào sống.
+		for (const entry of entries.slice(0, 3)) {
+			const result = await testProxy(entry);
+			if (result.ok)
+				logger.success(`Proxy ${result.country ?? '?'} ${result.ip} · ${result.ms}ms (${entry.label})`);
+			else logger.warn(`Proxy ${entry.label} không dùng được: ${result.error}`);
+		}
 	})();
 
 	logger.info('Bot đang chạy. Ctrl+C để dừng.');
