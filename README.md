@@ -330,6 +330,24 @@ API request for a region-locked quest goes through a matching proxy:
 PROXY_LIST_URL=https://raw.githubusercontent.com/<you>/<repo>/main/proxies.txt
 ```
 
+`PROXY_LIST` carries the same lines inline, newline separated, for hosts with no
+disk to keep a file on.
+
+## Solving the login captcha
+
+Discord sometimes answers the remote-auth ticket exchange with an hCaptcha
+challenge. `/login` handles it two ways:
+
+- With a solver key the bot clears the challenge itself and retries on the same IP:
+  set `CAPSOLVER_API_KEY` or `TWOCAPTCHA_API_KEY`.
+- Without a key, and when the bot runs as a web service (`RENDER_EXTERNAL_URL` is
+  set), the reply becomes a "Giải captcha" button. It opens a small page served by
+  the bot itself; ticking the box there sends the token back and the login
+  continues. The link lives five minutes.
+
+On a plain CLI run there is no public page, so the challenge cannot be handed to a
+person; the login then fails with a message saying so.
+
 Each line is one proxy, optionally tagged with a country:
 
 ```

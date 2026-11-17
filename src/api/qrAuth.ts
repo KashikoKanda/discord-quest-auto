@@ -13,6 +13,7 @@ import WebSocket from 'ws';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import QRCode from 'qrcode';
 import { logger } from '../core/logger';
+import { type CaptchaChallenge, parseCaptcha } from './captcha';
 
 const WS_URL = 'wss://remote-auth-gateway.discord.gg/?v=2';
 const LOGIN_URL = 'https://discord.com/api/v9/users/@me/remote-auth/login';
@@ -109,13 +110,21 @@ interface ExchangeOutcome {
 	token?: string;
 	error?: string;
 	captcha?: boolean;
+	challenge?: CaptchaChallenge;
 }
+
+/** Cách lấy token captcha: dịch vụ tự giải hoặc người dùng tự tick. */
+export type CaptchaHandler = (challenge: CaptchaChallenge) => Promise<string | null>;
 
 /**
  * Đổi ticket lấy token. Discord hay đòi captcha khi request tới từ IP máy chủ,
  * nên thử lần lượt vài kiểu vân tay trình duyệt rồi tới proxy nếu có.
  */
-async function exchangeTicket(ticket: string, pinnedProxy?: string): Promise<ExchangeOutcome> {
+async function exchangeTicket(
+	ticket: string,
+	pinnedProxy?: string,
+	onCaptcha?: CaptchaHandler,
+): Promise<ExchangeOutcome> {
 	const { loadProxies } = await import('../core/proxies');
 	const variants = [
 		{
@@ -173,7 +182,33 @@ async function exchangeTicket(ticket: string, pinnedProxy?: string): Promise<Exc
 
 			if (text.includes('captcha-required') || text.includes('captcha_key')) {
 				captcha = true;
-				lastError = 'Discord đòi captcha';
+				const challenge = parseCaptcha(text);
+				if (!challenge) {
+					lastError = 'Discord đòi captcha nhưng không đọc được sitekey';
+					continue;
+				}
+				if (!onCaptcha) return { error: 'Discord đòi captcha', captcha: true, challenge };
+
+				// Có người giải xong thì gửi lại kèm captcha_key, giữ nguyên IP và vân tay.
+				const captchaToken = await onCaptcha(challenge);
+				if (!captchaToken) return { error: 'Không có captcha token', captcha: true, challenge };
+
+				const retryBody = JSON.stringify({
+					ticket,
+					captcha_key: captchaToken,
+					captcha_rqdata: challenge.rqdata,
+					captcha_rqtoken: challenge.rqtoken,
+				});
+				const retry = { ...init, body: retryBody } as Record<string, unknown>;
+				const retryRes = attempt.proxy
+					? ((await (await import('undici')).fetch(LOGIN_URL, retry as any)) as unknown as Response)
+					: await fetch(LOGIN_URL, retry as any);
+				const retryText = await retryRes.text();
+				if (retryRes.ok) {
+					const parsed = JSON.parse(retryText) as { encrypted_token?: string };
+					if (parsed.encrypted_token) return { token: parsed.encrypted_token };
+				}
+				lastError = `Captcha không được chấp nhận: ${retryText.slice(0, 120)}`;
 				continue;
 			}
 
@@ -228,7 +263,7 @@ async function egressIp(proxyUrl?: string): Promise<string | null> {
 /** Mở một phiên QR và chờ token. */
 export async function startQrLogin(
 	handlers: QrHandlers = {},
-	options: { proxy?: string; userAgent?: string } = {},
+	options: { proxy?: string; userAgent?: string; onCaptcha?: CaptchaHandler } = {},
 ): Promise<QrLogin> {
 	const userAgent =
 		options.userAgent ??
@@ -389,7 +424,7 @@ export async function startQrLogin(
 					try {
 						const ticket = String(message.ticket ?? '');
 						if (!ticket) throw new Error('Thiếu ticket');
-						const outcome = await exchangeTicket(ticket, proxyUrl);
+						const outcome = await exchangeTicket(ticket, proxyUrl, options.onCaptcha);
 						if (outcome.token) {
 							resolveToken(decrypt(privateKey, outcome.token).toString('utf8'));
 						} else {

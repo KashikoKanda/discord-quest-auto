@@ -11,6 +11,7 @@ import { linkAccount } from './store';
 import { getDiscordProfile } from '../api/client';
 import { tokenIdFor } from '../core/config';
 import { logger } from '../core/logger';
+import { openManualTicket, solveAutomatically, solverService, type CaptchaChallenge } from '../api/captcha';
 
 interface LiveSession {
 	cancel: () => void;
@@ -84,16 +85,67 @@ export async function handleQrCommand(interaction: GatewayInteraction): Promise<
 		}).catch(() => undefined);
 	}
 
+	/** Xử lý khi Discord đòi captcha: tự giải nếu có key, không thì đưa link cho người dùng. */
+	const onCaptcha = async (challenge: CaptchaChallenge): Promise<string | null> => {
+		if (solverService()) {
+			await editOriginal(interaction.token, {
+				embeds: [
+					{
+						color: AMBER,
+						description: `Đang giải captcha bằng ${solverService()}…`,
+					},
+				],
+			});
+			try {
+				return await solveAutomatically(challenge);
+			} catch (error) {
+				logger.warn(`Giải captcha tự động lỗi: ${(error as Error).message}`);
+			}
+		}
+
+		const base = process.env.RENDER_EXTERNAL_URL?.trim();
+		if (!base) return null;
+
+		const ticket = openManualTicket(challenge);
+		const pageUrl = `${base.replace(/\/$/, '')}/captcha?id=${ticket.id}`;
+
+		await editOriginal(interaction.token, {
+			embeds: [
+				{
+					color: AMBER,
+					title: '🔐 Discord cần xác minh',
+					description: `Bấm nút bên dưới, tick captcha là xong.\n-# Link sống 5 phút`,
+				},
+			],
+			components: [
+				{
+					type: 1,
+					components: [{ type: 2, style: 5, label: 'Giải captcha', emoji: { name: '🧩' }, url: pageUrl }],
+				},
+			],
+		});
+
+		try {
+			return await ticket.wait;
+		} catch (error) {
+			logger.warn(`Chờ giải captcha thất bại: ${(error as Error).message}`);
+			return null;
+		}
+	};
+
 	let session: Awaited<ReturnType<typeof startQrLogin>>;
 	try {
-		session = await startQrLogin({
-			onScanned: (username) => {
-				// Có thể tới trước cả lúc tin nhắn kịp hiện nút; giữ lại để áp sau.
-				confirmed = true;
-				void username;
-				if (button.length > 0) showScanned().catch(() => undefined);
+		session = await startQrLogin(
+			{
+				onScanned: (username) => {
+					// Có thể tới trước cả lúc tin nhắn kịp hiện nút; giữ lại để áp sau.
+					confirmed = true;
+					void username;
+					if (button.length > 0) showScanned().catch(() => undefined);
+				},
 			},
-		});
+			{ onCaptcha },
+		);
 	} catch (error) {
 		await editOriginal(interaction.token, {
 			embeds: [
