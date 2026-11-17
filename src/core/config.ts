@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 
 export function loadEnv(file = '.env'): void {
 	if (!existsSync(file)) return;
@@ -51,8 +51,32 @@ export function readState(): State | null {
 	}
 }
 
+let pendingState: State | null = null;
+let flushTimer: NodeJS.Timeout | null = null;
+
+/**
+ * Ghi state an toàn khi nhiều tài khoản chạy cùng lúc: gộp các lần ghi trong 200ms,
+ * ghi ra file tạm rồi rename để không bao giờ có file nửa vời và không hai tiến
+ * trình cùng cắt ngang một file.
+ */
 export function writeState(state: State): void {
-	writeFileSync(statePath(), JSON.stringify(state, null, 2));
+	pendingState = state;
+	if (flushTimer) return;
+	flushTimer = setTimeout(() => {
+		flushTimer = null;
+		const data = pendingState;
+		pendingState = null;
+		if (!data) return;
+		try {
+			const path = statePath();
+			const tmp = `${path}.tmp`;
+			writeFileSync(tmp, JSON.stringify(data));
+			renameSync(tmp, path);
+		} catch {
+			/* ghi lỗi không được làm chết vòng chạy quest */
+		}
+	}, 200);
+	flushTimer.unref?.();
 }
 
 export function clearState(): void {

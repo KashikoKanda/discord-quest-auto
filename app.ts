@@ -16,6 +16,7 @@ import { gatewayStatus, startGateway, stopGateway } from './src/app/gateway';
 import { handleInteraction, commandDefs } from './src/app/commands';
 import { startKeepAlive } from './src/app/keepAlive';
 import { allAccounts, storePath } from './src/app/store';
+import { pruneFingerprints, storeSize } from './src/core/store';
 import { clearMarker, markTokenRejected, rejectedBefore } from './src/app/health';
 import { tokenFingerprint } from './src/core/redact';
 
@@ -66,6 +67,10 @@ async function main(): Promise<void> {
 		QuestWorker.registerToken(account.tokenId, account.token, false);
 	}
 	logger.info(`Đã nạp ${linked.length} tài khoản từ ${storePath()}.`);
+
+	// Dọn fingerprint của tài khoản đã gỡ để file không phình theo thời gian.
+	const removed = await pruneFingerprints(new Set([...linked.keys()]));
+	if (removed > 0) logger.info(`Đã dọn ${removed} fingerprint cũ, còn ${storeSize()} byte.`);
 
 	// Gói miễn phí của Render ngủ nếu không có request; cổng /health tự gọi lại giữ bot thức.
 	const keepAlive = startKeepAlive({ status: gatewayStatus });

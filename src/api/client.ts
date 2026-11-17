@@ -2,6 +2,8 @@ import { randomUUID } from 'crypto';
 import { loadFingerprint, saveFingerprint, deleteFingerprint } from '../core/store';
 
 import { API } from '../core/constants';
+import { withGate, gatePenalize } from '../core/gate';
+import { egressFor, noteEgressFailure } from '../core/affinity';
 import type { QuestListResponse, QuestShape } from '../core/interface';
 
 const DISCORD_API = API;
@@ -376,19 +378,35 @@ export async function discordFetch(
 	};
 
 	// Quest vùng khác cần đi qua proxy đúng quốc gia. Chỉ request được đánh dấu
-	// proxyUrl mới rời khỏi kết nối trực tiếp, phần còn lại giữ nguyên.
-	const { proxyUrl, ...rest } = options as RequestInit & { proxyUrl?: string };
-	if (proxyUrl) {
+	// proxyUrl mới rời khỏi kết nối trực tiếp, phần còn lại đi theo IP cố định của
+	// tài khoản (affinity) và chịu cửa van chung để không dội IP.
+	const { proxyUrl: forcedProxy, ...rest } = options as RequestInit & { proxyUrl?: string };
+
+	const egress = forcedProxy ? { key: forcedProxy, proxyUrl: forcedProxy } : await egressFor(tokenId);
+
+	const send = async (): Promise<Response> => {
+		if (!egress.proxyUrl) return (await fetch(url, { ...rest, headers })) as Response;
 		const { ProxyAgent, fetch: undiciFetch } = await import('undici');
-		const res = await undiciFetch(url, {
+		return (await undiciFetch(url, {
 			...rest,
 			headers,
-			dispatcher: new ProxyAgent(proxyUrl),
-		} as Parameters<typeof undiciFetch>[1]);
-		return res as unknown as Response;
+			dispatcher: new ProxyAgent(egress.proxyUrl),
+		} as Parameters<typeof undiciFetch>[1])) as unknown as Response;
+	};
+
+	const res = await withGate(egress.key, send).catch((error: Error) => {
+		noteEgressFailure(egress.key, 60_000);
+		throw error;
+	});
+
+	// Một IP bị 429 là chuyện của cả IP, không phải của riêng tài khoản: cho cả
+	// khoá nghỉ đúng thời gian Discord yêu cầu (hoặc 5 giây nếu không nói).
+	if (res.status === 429) {
+		const retryAfter = Number(res.headers.get('retry-after') ?? '');
+		const waitMs = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 5_000;
+		gatePenalize(egress.key, waitMs);
 	}
 
-	const res = await fetch(url, { ...rest, headers });
 	return res;
 }
 

@@ -333,6 +333,30 @@ PROXY_LIST_URL=https://raw.githubusercontent.com/<you>/<repo>/main/proxies.txt
 `PROXY_LIST` carries the same lines inline, newline separated, for hosts with no
 disk to keep a file on.
 
+## Running many accounts at once
+
+Every request to Discord passes a shared gate keyed by the IP it leaves from, so a
+hundred accounts do not turn into a burst from one address:
+
+```bash
+GATE_DIRECT_CONCURRENCY=4     # requests in flight on the direct connection
+GATE_DIRECT_MIN_GAP_MS=250    # spacing between two starts
+GATE_PROXY_CONCURRENCY=2      # same, per proxy
+GATE_PROXY_MIN_GAP_MS=800
+```
+
+A 429 pauses that whole exit for as long as Discord asks, instead of each account
+retrying on its own. With proxies configured, an account is hashed onto one proxy
+and keeps using it, so it does not hop IPs between calls; a proxy that fails is
+skipped for a minute and the account moves to another.
+
+Each account already has its own stored fingerprint (browser version, OS build,
+locale, timezone, launch id, heartbeat session) reused on every request, so headers
+stay consistent instead of being randomised per call. The fingerprint file is written
+compactly, pruned at startup for accounts that are gone, and quest state is flushed
+every 200 ms through a temp file and rename, so concurrent workers cannot truncate
+each other's progress.
+
 ## Solving the login captcha
 
 Discord sometimes answers the remote-auth ticket exchange with an hCaptcha

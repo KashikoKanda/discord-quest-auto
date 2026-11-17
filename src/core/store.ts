@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, renameSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, renameSync, existsSync, statSync } from 'node:fs';
 
 export interface Fingerprint {
 	launchId: string;
@@ -46,6 +46,28 @@ export async function loadFingerprint(tokenId: string): Promise<Fingerprint | nu
 export async function saveFingerprint(tokenId: string, data: Fingerprint): Promise<void> {
 	read().fingerprints[tokenId] = data;
 	persist();
+}
+
+/** Xoá fingerprint của những tài khoản không còn dùng, giữ file nhỏ. */
+export async function pruneFingerprints(keep: Set<string>): Promise<number> {
+	const store = read();
+	let removed = 0;
+	for (const tokenId of Object.keys(store.fingerprints)) {
+		if (keep.has(tokenId)) continue;
+		delete store.fingerprints[tokenId];
+		removed += 1;
+	}
+	if (removed > 0) persist();
+	return removed;
+}
+
+/** Kích thước file hiện tại (byte), để báo khi thấy phình to. */
+export function storeSize(): number {
+	try {
+		return statSync(STORE_PATH).size;
+	} catch {
+		return 0;
+	}
 }
 
 export async function deleteFingerprint(tokenId: string): Promise<void> {
