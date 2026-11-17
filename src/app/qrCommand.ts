@@ -17,6 +17,9 @@ interface LiveSession {
 	cancel: () => void;
 	/** Token interaction của tin nhắn cũ, để sửa nó khi có link mới. */
 	interactionToken: string;
+	/** Link đang sống, để lần gọi lại dùng đúng link cũ thay vì huỷ phiên. */
+	link: string;
+	createdAt: number;
 }
 
 /** Phiên đang mở của từng người, để link cũ không còn sống khi có link mới. */
@@ -74,9 +77,31 @@ export async function handleQrCommand(interaction: GatewayInteraction): Promise<
 
 	await waiting();
 
-	// Mỗi người chỉ giữ một link sống. Link cũ mà bấm vào sẽ ra trang "không tìm thấy
-	// thiết bị" của Discord, nên huỷ hẳn phiên trước.
+	// Mỗi người chỉ giữ một link sống.
 	const previous = liveSessions.get(userId);
+	if (previous && Date.now() - previous.createdAt < 100_000) {
+		// Vừa mới xin link xong mà gọi lại thì trả đúng link đó: huỷ phiên rồi tạo
+		// phiên mới chỉ làm người dùng mất phiên ngay sau khi vừa mở.
+		await editOriginal(interaction.token, {
+			content: '',
+			components: [
+				{
+					type: 1,
+					components: [
+						{
+							type: 2,
+							style: 5,
+							label: 'Đăng nhập ngay',
+							emoji: { name: '🔐' },
+							url: previous.link,
+						},
+					],
+				},
+			],
+		});
+		return;
+	}
+
 	if (previous) {
 		previous.cancel();
 		// Tin nhắn cũ vẫn còn nút; ghi đè để người dùng biết bấm vào là vô ích.
@@ -159,13 +184,18 @@ export async function handleQrCommand(interaction: GatewayInteraction): Promise<
 		return;
 	}
 
-	liveSessions.set(userId, { cancel: session.cancel, interactionToken: interaction.token });
+	const link = `https://discord.com/ra/${session.fingerprint}`;
+
+	liveSessions.set(userId, {
+		cancel: session.cancel,
+		interactionToken: interaction.token,
+		link,
+		createdAt: Date.now(),
+	});
 	// Dọn khi phiên kết thúc để không giữ tham chiếu.
 	const forget = () => {
 		if (liveSessions.get(userId)?.cancel === session.cancel) liveSessions.delete(userId);
 	};
-
-	const link = `https://discord.com/ra/${session.fingerprint}`;
 
 	button = [
 		{

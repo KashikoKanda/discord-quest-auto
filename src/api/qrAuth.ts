@@ -243,8 +243,19 @@ async function exchangeTicket(
 	return { error: lastError || 'Không đổi được mã QR thành token', captcha };
 }
 
-/** IP mà máy này đi ra internet, hoặc null nếu không biết. */
+const ipCache = new Map<string, { ip: string | null; at: number }>();
+
+/** IP mà máy này đi ra internet, hoặc null nếu không biết. Nhớ 2 phút để /login mở nhanh. */
 async function egressIp(proxyUrl?: string): Promise<string | null> {
+	const key = proxyUrl ?? 'direct';
+	const cached = ipCache.get(key);
+	if (cached && Date.now() - cached.at < 120_000) return cached.ip;
+	const ip = await measureIp(proxyUrl);
+	ipCache.set(key, { ip, at: Date.now() });
+	return ip;
+}
+
+async function measureIp(proxyUrl?: string): Promise<string | null> {
 	try {
 		const init: Record<string, unknown> = { signal: AbortSignal.timeout(6000) };
 		if (proxyUrl) {
@@ -321,6 +332,7 @@ export async function startQrLogin(
 
 	const stop = () => {
 		if (closed) return;
+		logger.info('remote-auth: đóng phiên theo yêu cầu');
 		closed = true;
 		if (heartbeat) clearInterval(heartbeat);
 		if (timer) clearTimeout(timer);
@@ -455,9 +467,13 @@ export async function startQrLogin(
 		});
 
 		ws.on('error', (error: Error) => fail(new Error(`Không kết nối được remote-auth-gateway: ${error.message}`)));
-		ws.on('close', () => {
+		ws.on('close', (code: number, reason: Buffer) => {
+			const detail = reason?.toString?.() ?? '';
+			logger.info(
+				`remote-auth đóng socket: mã ${code}${detail ? ` · ${detail}` : ''}${exchanging ? ' (đang đổi ticket, bỏ qua)' : ''}`,
+			);
 			if (!done) fail(new Error('Kết nối remote-auth-gateway đóng sớm'));
-			else rejectToken(new Error('Phiên QR đã đóng'));
+			else if (!exchanging) rejectToken(new Error('Phiên QR đã đóng'));
 			stop();
 		});
 	});
