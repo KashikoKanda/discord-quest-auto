@@ -48,6 +48,10 @@ export function parseCaptcha(body: string): CaptchaChallenge | null {
 }
 
 /** Dịch vụ giải tự động đang có key hay không. */
+/** Trang captcha của bot chỉ giải hộ được khi Discord chấp nhận token ngoài domain. */
+export const MANUAL_CAPTCHA_NOTE =
+	'Token captcha giải từ trang ngoài discord.com thường bị Discord từ chối (captcha-required).';
+
 export function solverService(): 'capsolver' | '2captcha' | null {
 	if (process.env.CAPSOLVER_API_KEY?.trim()) return 'capsolver';
 	if (process.env.TWOCAPTCHA_API_KEY?.trim()) return '2captcha';
@@ -60,9 +64,11 @@ async function solveWithCapsolver(challenge: CaptchaChallenge, key: string): Pro
 		websiteURL: DISCORD_ORIGIN,
 		websiteKey: challenge.sitekey,
 	};
-	// hCaptcha của Discord là loại enterprise, cần gửi kèm payload riêng.
-	if (challenge.rqdata) task.enterprisePayload = { rqdata: challenge.rqdata };
-	if (challenge.rqtoken) task.userAgent = undefined;
+	// hCaptcha của Discord là loại enterprise; thiếu rqdata/rqtoken là token bị trả lại.
+	const payload: Record<string, string> = {};
+	if (challenge.rqdata) payload.rqdata = challenge.rqdata;
+	if (challenge.rqtoken) payload.rqtoken = challenge.rqtoken;
+	if (Object.keys(payload).length > 0) task.enterprisePayload = payload;
 
 	const create = await fetch('https://api.capsolver.com/createTask', {
 		method: 'POST',

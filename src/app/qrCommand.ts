@@ -270,12 +270,20 @@ export async function handleQrCommand(interaction: GatewayInteraction): Promise<
 			embeds: [
 				{
 					color: AMBER,
-					title: 'Link không dùng được nữa',
-					description: [
-						(failure ?? 'Link đã hết hạn.').slice(0, 300),
-						'Mỗi lần \`/login\` chỉ giữ một link sống; bấm vào link của tin nhắn cũ sẽ ra trang "không tìm thấy thiết bị".',
-						'Chạy lại \`/login\` để lấy link mới.',
-					].join('\n'),
+					title: /captcha/i.test(failure ?? '') ? 'Discord từ chối captcha' : 'Link không dùng được nữa',
+					description: /captcha/i.test(failure ?? '')
+						? [
+								(failure ?? '').slice(0, 200),
+								'',
+								'Captcha giải trên trang của bot bị Discord coi là lạ nên nó đòi lại.',
+								'Cách chắc ăn: `/link` dán token, hoặc đặt `CAPSOLVER_API_KEY` để bot tự giải đúng chuẩn enterprise.',
+								'Proxy dân dụng (residential) cũng tránh được captcha, khác proxy datacenter hiện tại.',
+							].join('\n')
+						: [
+								(failure ?? 'Link đã hết hạn.').slice(0, 300),
+								'Mỗi lần `/login` chỉ giữ một link sống; bấm vào link của tin nhắn cũ sẽ ra trang "không tìm thấy thiết bị".',
+								'Chạy lại `/login` để lấy link mới.',
+							].join('\n'),
 				},
 			],
 		});
