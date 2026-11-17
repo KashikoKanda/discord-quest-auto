@@ -83,6 +83,23 @@ async function main(): Promise<void> {
 	}, AUTO_EVERY_MS);
 	auto.unref?.();
 
+	// Kiểm tra nhanh proxy nếu có cấu hình: biết ngay máy chủ này có ra được cổng proxy
+	// hay không, thay vì đợi tới lúc ai đó dùng /login.
+	void (async () => {
+		const { proxySource, testProxy, loadProxies } = await import('./src/core/proxies');
+		const source = proxySource();
+		if (!source.url && !source.file && !source.inline) return;
+		const entries = await loadProxies().catch(() => []);
+		if (entries.length === 0) {
+			logger.warn('Có cấu hình proxy nhưng danh sách rỗng.');
+			return;
+		}
+		const first = entries[0];
+		const result = await testProxy(first);
+		if (result.ok) logger.success(`Proxy ${result.country ?? '?'} ${result.ip} · ${result.ms}ms (${first.label})`);
+		else logger.warn(`Proxy ${first.label} không dùng được: ${result.error}`);
+	})();
+
 	logger.info('Bot đang chạy. Ctrl+C để dừng.');
 
 	const shutdown = (signal: string) => {
