@@ -46,7 +46,8 @@ function clip(text: string, max: number): string {
 
 function metaLine(quest: CardQuest): string {
 	const type = quest.type.replace(/_/g, ' ').toLowerCase();
-	return `${quest.minutes}m · ${type} · ${quest.tag}`;
+	// Chỉ giữ hai thứ người xem thật sự cần khi lướt: dài bao lâu, loại gì.
+	return `${quest.minutes} phút · ${type}`;
 }
 
 function labelSvg(quest: CardQuest): Buffer {
@@ -204,7 +205,7 @@ export async function renderQuestCard(
 	}
 
 	const padX = Math.round(width * 0.045);
-	const nameFont = Math.round(width * 0.043);
+	const nameFont = Math.round(width * 0.046);
 	const metaFont = Math.round(width * 0.024);
 	const noteFont = Math.round(width * 0.019);
 	const badgeFont = Math.round(width * 0.023);
@@ -213,9 +214,10 @@ export async function renderQuestCard(
 	const badgeX = width - badgeW - Math.round(width * 0.028);
 	const badgeY = Math.round(width * 0.028);
 
-	// Dải chữ hai dòng: tên, rồi dòng phụ gộp vùng và ghi chú.
-	const subtitle = [metaLine(quest), options.note ?? ''].filter(Boolean).join(' · ');
-	const panelH = Math.round(nameFont * 1.3 + metaFont * 2 + width * 0.022);
+	// Dải chữ hai dòng thật gọn: tên, rồi thời lượng và loại. Ghi chú (nếu có) là
+	// kết quả nhận quest, đã nằm trong embed chứ không lặp lại trên ảnh.
+	const subtitle = metaLine(quest);
+	const panelH = Math.round(nameFont * 1.35 + metaFont * 2 + width * 0.018);
 	const height = artHeight + panelH;
 
 	const art = hero

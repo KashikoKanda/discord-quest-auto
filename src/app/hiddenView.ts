@@ -41,53 +41,14 @@ export function hiddenSession(userId: string): HiddenQuest[] {
 	return found.quests;
 }
 
-function cardFields(quest: HiddenQuest): { meta: string; note: string } {
+function cardFields(quest: HiddenQuest): { region: string; note: string } {
 	const region = quest.region;
 	const area =
 		region && region.isGlobal && region.include.length === 0
 			? 'toàn cầu'
-			: (region?.include ?? []).slice(0, 3).join(', ') || 'chưa rõ vùng';
-	const meta = `${quest.minutes} phút · ${quest.type.replace(/_/g, ' ').toLowerCase()} · ${area}`;
+			: (region?.include ?? []).slice(0, 4).join(', ') || 'chưa rõ vùng';
 	const note = `${quest.game || 'không rõ game'} · ${quest.reason}`;
-	return { meta, note };
-}
-
-const CHUNK = 25;
-
-/** Menu chọn nhanh: 25 quest quanh vị trí đang xem, bấm là nhảy thẳng tới. */
-function pickMenu(quests: HiddenQuest[], index: number): Record<string, unknown> {
-	const chunk = Math.floor(index / CHUNK);
-	const from = chunk * CHUNK;
-	const slice = quests.slice(from, from + CHUNK);
-	const options = slice.map((quest, offset) => {
-		const area =
-			quest.region && quest.region.isGlobal && quest.region.include.length === 0
-				? 'toàn cầu'
-				: (quest.region?.include ?? []).slice(0, 2).join('/') || 'chưa rõ vùng';
-		return {
-			label: `${from + offset + 1}. ${quest.name}`.slice(0, 100),
-			value: String(from + offset),
-			description: `${quest.minutes} phút · ${quest.type.replace(/_/g, ' ').toLowerCase()} · ${area}`.slice(
-				0,
-				100,
-			),
-			default: from + offset === index,
-		};
-	});
-
-	return {
-		type: 1,
-		components: [
-			{
-				type: 3,
-				custom_id: 'hv|pick',
-				placeholder: `Chọn quest (${from + 1}-${from + slice.length} trên ${quests.length})`,
-				min_values: 1,
-				max_values: 1,
-				options,
-			},
-		],
-	};
+	return { region: area, note };
 }
 
 function buttons(questId: string, index: number, total: number, note?: string): Record<string, unknown>[] {
@@ -98,7 +59,7 @@ function buttons(questId: string, index: number, total: number, note?: string): 
 				{
 					type: 2,
 					style: 2,
-					label: 'Trở lại',
+					label: 'Trước',
 					emoji: { name: '◀' },
 					custom_id: `hv|prev|${index}`,
 					disabled: index <= 0,
@@ -113,17 +74,10 @@ function buttons(questId: string, index: number, total: number, note?: string): 
 				{
 					type: 2,
 					style: 2,
-					label: 'Tiếp',
+					label: 'Sau',
 					emoji: { name: '▶' },
 					custom_id: `hv|next|${index}`,
 					disabled: index >= total - 1,
-				},
-				{
-					// Nút link: mở đúng quest trong app Discord.
-					type: 2,
-					style: 5,
-					label: 'Mở quest',
-					url: `https://discord.com/quests/${questId}`,
 				},
 			],
 		},
@@ -147,23 +101,24 @@ export async function hiddenPageBody(
 			tag: fields.note,
 			hero: quest.hero,
 		},
-		{ index, total: quests.length, note: `${quest.game} · ${quest.reason}` },
+		{ index, total: quests.length },
 	);
 
-	const link = `https://discord.com/quests/${quest.id}`;
-	const embed: Record<string, unknown> = {
-		color: 0x5865f2,
-		title: quest.name.slice(0, 240),
-		url: link,
-		description: `[\`${quest.type}\` · ${fields.meta}](${link})\n[\`${quest.id}\`](${link})`,
-		image: { url: 'attachment://quest-hidden.png' },
-		footer: { text: `Quest ẩn ${index + 1}/${quests.length}${note ? ` · ${note}` : ''}` },
-		timestamp: new Date().toISOString(),
-	};
+	// Ảnh đã có tên quest, thời lượng và loại, nên phần chữ chỉ giữ thứ ảnh không
+	// nói được: quest khoá vùng nào, và kết quả lần nhận vừa rồi.
+	const lines: string[] = [];
+	if (!(fields.region === 'toàn cầu')) lines.push(`🌍 Vùng \`${fields.region}\``);
+	if (note) lines.push(note);
 
 	return {
-		embeds: [embed],
-		components: [pickMenu(quests, index), ...buttons(quest.id, index, quests.length, note)],
+		embeds: [
+			{
+				color: 0x5865f2,
+				description: lines.join('\n') || undefined,
+				image: { url: 'attachment://quest-hidden.png' },
+			},
+		],
+		components: buttons(quest.id, index, quests.length, note),
 		attachments: [{ id: 0, filename: 'quest-hidden.png', description: quest.name.slice(0, 100) }],
 		file: png,
 	};
@@ -199,16 +154,6 @@ export async function handleHiddenButton(interaction: GatewayInteraction): Promi
 	}
 
 	const index = Math.max(0, Math.min(quests.length - 1, Number(rawIndex) || 0));
-
-	if (action === 'pick') {
-		// Menu chọn nhanh gửi giá trị là chỉ số quest.
-		const picked = Number(interaction.data?.values?.[0] ?? 0);
-		const at = Math.max(0, Math.min(quests.length - 1, Number.isFinite(picked) ? picked : 0));
-		await sendHiddenPage(interaction.token, quests, at).catch((error: Error) =>
-			logger.warn(`Không cập nhật được trang quest ẩn: ${error.message}`),
-		);
-		return;
-	}
 
 	if (action === 'prev' || action === 'next') {
 		const next = Math.max(0, Math.min(quests.length - 1, index + (action === 'next' ? 1 : -1)));
