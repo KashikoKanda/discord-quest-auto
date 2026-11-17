@@ -153,6 +153,9 @@ async function exchangeTicket(
 	let captcha = false;
 	let lastError = '';
 	let proxyNetworkErrors = 0;
+	/** Token captcha đã giải; giải một lần rồi dùng lại cho các lần thử sau. */
+	let solvedCaptcha: string | null = null;
+	let captchaExtras: { rqdata?: string; rqtoken?: string } = {};
 
 	for (const [index, attempt] of attempts.entries()) {
 		try {
@@ -187,29 +190,51 @@ async function exchangeTicket(
 					lastError = 'Discord đòi captcha nhưng không đọc được sitekey';
 					continue;
 				}
-				if (!onCaptcha) return { error: 'Discord đòi captcha', captcha: true, challenge };
 
-				// Có người giải xong thì gửi lại kèm captcha_key, giữ nguyên IP và vân tay.
-				const captchaToken = await onCaptcha(challenge);
-				if (!captchaToken) return { error: 'Không có captcha token', captcha: true, challenge };
+				if (!solvedCaptcha) {
+					if (!onCaptcha) return { error: 'Discord đòi captcha', captcha: true, challenge };
+					const solved = await onCaptcha(challenge);
+					if (!solved) return { error: 'Không có captcha token', captcha: true, challenge };
+					solvedCaptcha = solved;
+					captchaExtras = { rqdata: challenge.rqdata, rqtoken: challenge.rqtoken };
+				}
 
-				const retryBody = JSON.stringify({
-					ticket,
-					captcha_key: captchaToken,
-					captcha_rqdata: challenge.rqdata,
-					captcha_rqtoken: challenge.rqtoken,
-				});
-				const retry = { ...init, body: retryBody } as Record<string, unknown>;
-				const retryRes = attempt.proxy
-					? ((await (await import('undici')).fetch(LOGIN_URL, retry as any)) as unknown as Response)
-					: await fetch(LOGIN_URL, retry as any);
+				// Gửi lại với signal MỚI: signal của lần đầu đã hết hạn trong lúc chờ giải.
+				logger.info('Đã có captcha token, gửi lại yêu cầu đổi ticket');
+				const retryInit: Record<string, unknown> = {
+					method: 'POST',
+					headers: browserHeaders(attempt.ua, attempt.chrome),
+					body: JSON.stringify({
+						ticket,
+						captcha_key: solvedCaptcha,
+						captcha_rqdata: captchaExtras.rqdata,
+						captcha_rqtoken: captchaExtras.rqtoken,
+					}),
+					signal: AbortSignal.timeout(30_000),
+				};
+
+				let retryRes: Awaited<ReturnType<typeof fetch>>;
+				if (attempt.proxy) {
+					const { ProxyAgent, fetch: undiciFetch } = await import('undici');
+					(retryInit as any).dispatcher = new ProxyAgent(attempt.proxy);
+					retryRes = (await undiciFetch(LOGIN_URL, retryInit as any)) as unknown as Response;
+				} else {
+					retryRes = await fetch(LOGIN_URL, retryInit as any);
+				}
+
 				const retryText = await retryRes.text();
 				if (retryRes.ok) {
 					const parsed = JSON.parse(retryText) as { encrypted_token?: string };
 					if (parsed.encrypted_token) return { token: parsed.encrypted_token };
+					return { error: 'Discord không trả token sau khi giải captcha' };
 				}
-				lastError = `Captcha không được chấp nhận: ${retryText.slice(0, 120)}`;
-				continue;
+
+				logger.warn(`Đổi ticket sau captcha thất bại (${retryRes.status}): ${retryText.slice(0, 160)}`);
+				return {
+					error: `Captcha không được chấp nhận (${retryRes.status}): ${retryText.slice(0, 200)}`,
+					captcha: true,
+					challenge,
+				};
 			}
 
 			if (text.includes('Invalid remote authentication ticket') || text.includes('20042')) {
