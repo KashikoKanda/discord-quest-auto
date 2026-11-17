@@ -51,33 +51,46 @@ function cardFields(quest: HiddenQuest): { region: string; note: string } {
 	return { region: area, note };
 }
 
-function buttons(questId: string, index: number, total: number, note?: string): Record<string, unknown>[] {
+const CHUNK = 25;
+
+/** Menu chọn quest: 25 quest quanh vị trí đang xem, chọn là nhảy thẳng tới. */
+function pickMenu(quests: HiddenQuest[], index: number): Record<string, unknown> {
+	const chunk = Math.floor(index / CHUNK);
+	const from = chunk * CHUNK;
+	const slice = quests.slice(from, from + CHUNK);
+	const options = slice.map((quest, offset) => ({
+		label: `${from + offset + 1}. ${quest.name}`.slice(0, 100),
+		value: String(from + offset),
+		description: `${quest.minutes} phút · ${quest.type.replace(/_/g, ' ').toLowerCase()}`.slice(0, 100),
+		default: from + offset === index,
+	}));
+
+	return {
+		type: 1,
+		components: [
+			{
+				type: 3,
+				custom_id: 'hv|pick',
+				placeholder: `Chọn quest · đang xem ${index + 1}/${quests.length}`,
+				min_values: 1,
+				max_values: 1,
+				options,
+			},
+		],
+	};
+}
+
+function buttons(index: number, note?: string): Record<string, unknown>[] {
 	return [
 		{
 			type: 1,
 			components: [
 				{
 					type: 2,
-					style: 2,
-					label: 'Trước',
-					emoji: { name: '◀' },
-					custom_id: `hv|prev|${index}`,
-					disabled: index <= 0,
-				},
-				{
-					type: 2,
 					style: 3,
 					label: note ? 'Nhận lại' : 'Nhận quest',
 					emoji: { name: '🎁' },
 					custom_id: `hv|enroll|${index}`,
-				},
-				{
-					type: 2,
-					style: 2,
-					label: 'Sau',
-					emoji: { name: '▶' },
-					custom_id: `hv|next|${index}`,
-					disabled: index >= total - 1,
 				},
 			],
 		},
@@ -118,7 +131,7 @@ export async function hiddenPageBody(
 				image: { url: 'attachment://quest-hidden.png' },
 			},
 		],
-		components: buttons(quest.id, index, quests.length, note),
+		components: [pickMenu(quests, index), ...buttons(index, note)],
 		attachments: [{ id: 0, filename: 'quest-hidden.png', description: quest.name.slice(0, 100) }],
 		file: png,
 	};
@@ -155,9 +168,11 @@ export async function handleHiddenButton(interaction: GatewayInteraction): Promi
 
 	const index = Math.max(0, Math.min(quests.length - 1, Number(rawIndex) || 0));
 
-	if (action === 'prev' || action === 'next') {
-		const next = Math.max(0, Math.min(quests.length - 1, index + (action === 'next' ? 1 : -1)));
-		await sendHiddenPage(interaction.token, quests, next).catch((error: Error) =>
+	if (action === 'pick') {
+		// Menu gửi giá trị là chỉ số quest trong danh sách phiên.
+		const picked = Number(interaction.data?.values?.[0] ?? 0);
+		const at = Math.max(0, Math.min(quests.length - 1, Number.isFinite(picked) ? picked : 0));
+		await sendHiddenPage(interaction.token, quests, at).catch((error: Error) =>
 			logger.warn(`Không cập nhật được trang quest ẩn: ${error.message}`),
 		);
 		return;
