@@ -274,7 +274,13 @@ async function measureIp(proxyUrl?: string): Promise<string | null> {
 /** Mở một phiên QR và chờ token. */
 export async function startQrLogin(
 	handlers: QrHandlers = {},
-	options: { proxy?: string; userAgent?: string; onCaptcha?: CaptchaHandler } = {},
+	options: {
+		proxy?: string;
+		userAgent?: string;
+		onCaptcha?: CaptchaHandler;
+		/** Đi socket qua proxy; mặc định tắt vì proxy hay cắt tunnel rảnh. */
+		socketProxy?: boolean;
+	} = {},
 ): Promise<QrLogin> {
 	const userAgent =
 		options.userAgent ??
@@ -311,7 +317,9 @@ export async function startQrLogin(
 		throw new Error(`Không kết nối được proxy ${options.proxy.replace(/\/\/[^@]*@/, '//')} (cổng bị chặn?)`);
 	}
 
-	const agent = proxyUrl ? new HttpsProxyAgent(proxyUrl, { timeout: 20_000 }) : undefined;
+	// Socket remote-auth đi thẳng, chỉ bước đổi ticket mới qua proxy. Gate proxy hay
+	// cắt tunnel rảnh sau vài giây (đóng 1006) làm phiên chết trước khi kịp quét.
+	const agent = proxyUrl && options.socketProxy ? new HttpsProxyAgent(proxyUrl, { timeout: 20_000 }) : undefined;
 
 	const ws = new WebSocket(WS_URL, {
 		agent,

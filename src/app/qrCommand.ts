@@ -216,12 +216,53 @@ export async function handleQrCommand(interaction: GatewayInteraction): Promise<
 	};
 
 	let failure: string | null = null;
-	const token = await session.wait.catch((error: Error) => {
+	let token = await session.wait.catch((error: Error) => {
 		logger.warn(`Đăng nhập thất bại: ${error.message}`);
 		failure = error.message;
 		return null;
 	});
 	forget();
+
+	// Phiên hay bị Discord/proxy cắt ngay sau khi mở; thử lại vài lần trước khi báo lỗi.
+	for (let retry = 1; retry <= 2 && !token && /đóng|hết hạn|huỷ/i.test(failure ?? ''); retry += 1) {
+		await editOriginal(interaction.token, {
+			embeds: [{ color: AMBER, description: `Mất phiên, đang thử lại (${retry}/2)…` }],
+		}).catch(() => undefined);
+
+		try {
+			const again = await startQrLogin({ onScanned: () => undefined }, { onCaptcha });
+			liveSessions.set(userId, {
+				cancel: again.cancel,
+				interactionToken: interaction.token,
+				link: `https://discord.com/ra/${again.fingerprint}`,
+				createdAt: Date.now(),
+			});
+			button = [
+				{
+					type: 1,
+					components: [
+						{
+							type: 2,
+							style: 5,
+							label: 'Đăng nhập ngay',
+							emoji: { name: '🔐' },
+							url: `https://discord.com/ra/${again.fingerprint}`,
+						},
+					],
+				},
+			];
+			await editOriginal(interaction.token, { content: '', components: button }).catch(() => undefined);
+			token = await again.wait.catch((error: Error) => {
+				logger.warn(`Đăng nhập lại thất bại: ${error.message}`);
+				failure = error.message;
+				return null;
+			});
+			liveSessions.delete(userId);
+		} catch (error) {
+			failure = (error as Error).message;
+			break;
+		}
+	}
 
 	if (!token) {
 		await closeNotice(`Đăng nhập với tư cách <@${userId}> không hoàn tất`);
