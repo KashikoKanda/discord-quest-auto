@@ -116,7 +116,7 @@ interface ExchangeOutcome {
  * nên thử lần lượt vài kiểu vân tay trình duyệt rồi tới proxy nếu có.
  */
 async function exchangeTicket(ticket: string, pinnedProxy?: string): Promise<ExchangeOutcome> {
-	const { loadProxies, resolveProxyUrl } = await import('../core/proxies');
+	const { loadProxies } = await import('../core/proxies');
 	const variants = [
 		{
 			ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/158.0.0.0 Safari/537.36',
@@ -238,7 +238,7 @@ export async function startQrLogin(
 
 	// Chọn proxy trước khi mở WebSocket: phiên QR phải đi cùng IP với lúc đổi ticket,
 	// nếu không Discord thấy hai IP khác nhau và đòi captcha.
-	const { loadProxies } = await import('../core/proxies');
+	const { loadProxies, resolveProxyUrl } = await import('../core/proxies');
 	const proxies = options.proxy
 		? [{ url: options.proxy, label: options.proxy.replace(/:[^:@/]+@?[^:@/]*$/, ':***'), country: null }]
 		: await loadProxies().catch(() => []);
