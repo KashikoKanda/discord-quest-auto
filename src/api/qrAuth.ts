@@ -268,6 +268,9 @@ export async function startQrLogin(
 	const userAgent =
 		options.userAgent ??
 		'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/138.0.0.0 Safari/537.36';
+	/** Đang đổi ticket: socket đóng lúc này không được coi là huỷ phiên. */
+	let exchanging = false;
+
 	const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
 	const encodedPublicKey = publicKey.export({ type: 'spki', format: 'der' }).toString('base64');
 
@@ -424,6 +427,8 @@ export async function startQrLogin(
 					try {
 						const ticket = String(message.ticket ?? '');
 						if (!ticket) throw new Error('Thiếu ticket');
+						exchanging = true;
+						logger.info('Có ticket, bắt đầu đổi lấy token (có thể phải giải captcha)');
 						const outcome = await exchangeTicket(ticket, proxyUrl, options.onCaptcha);
 						if (outcome.token) {
 							resolveToken(decrypt(privateKey, outcome.token).toString('utf8'));
@@ -438,7 +443,9 @@ export async function startQrLogin(
 				}
 
 				case 'cancel': {
-					fail(new Error('Link đã bị huỷ hoặc thiết bị không tìm thấy phiên này'));
+					// Huỷ tới sau khi đã có ticket thường chỉ là Discord dọn phiên.
+					if (exchanging) logger.info('Discord đóng phiên sau khi đã có ticket, bỏ qua');
+					else fail(new Error('Link đã bị huỷ hoặc thiết bị không tìm thấy phiên này'));
 					break;
 				}
 

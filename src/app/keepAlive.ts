@@ -31,7 +31,9 @@ export function startKeepAlive(options: KeepAliveOptions): { stop: () => void } 
 
 		// Trang cho người dùng tự giải captcha Discord.
 		if (req.method === 'GET' && url.pathname === '/captcha') {
-			const html = captchaPage(url.searchParams.get('id') ?? '');
+			const id = url.searchParams.get('id') ?? '';
+			const html = captchaPage(id);
+			console.log(`[captcha] mở trang · ${html ? 'vé hợp lệ' : 'vé hết hạn'}`);
 			res.writeHead(html ? 200 : 410, { 'Content-Type': 'text/html; charset=utf-8' });
 			res.end(
 				html ??
@@ -54,6 +56,7 @@ export function startKeepAlive(options: KeepAliveOptions): { stop: () => void } 
 				} catch {
 					ok = false;
 				}
+				console.log(`[captcha] nhận token · ${ok ? 'ok' : 'vé hết hạn hoặc sai'}`);
 				res.writeHead(ok ? 200 : 410, { 'Content-Type': 'application/json' });
 				res.end(JSON.stringify({ ok }));
 			});
