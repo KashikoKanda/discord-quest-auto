@@ -9,6 +9,7 @@
 
 import { loadProxies } from './proxies';
 import { gatePenalize } from './gate';
+import { logger } from './logger';
 
 interface Failure {
 	cooldownUntil: number;
@@ -31,6 +32,20 @@ function enabled(): boolean {
 	return true;
 }
 
+/**
+ * Kéo dài thời gian sống của phiên proxy.
+ *
+ * Proxy dạng `...-session-<id>-life-5m` sẽ đổi IP sau 5 phút. Một token mà cứ
+ * vài phút lại xuất hiện từ IP khác chính là kiểu Discord nghi bị đánh cắp rồi
+ * vô hiệu hoá. Đặt PROXY_SESSION_LIFE (mặc định 60m) để giữ nguyên IP lâu hơn.
+ */
+export function stabilizeProxyUrl(url: string): string {
+	// 30m là mức nhiều nhà cung cấp còn cho phép; đặt rỗng để giữ nguyên như danh sách.
+	const life = (process.env.PROXY_SESSION_LIFE ?? '30m').trim();
+	if (!life) return url;
+	return url.replace(/life-\d+[smh]/g, `life-${life}`);
+}
+
 export interface Egress {
 	/** Khoá dùng cho cửa van: 'direct' hoặc URL proxy. */
 	key: string;
@@ -48,8 +63,13 @@ export async function egressFor(tokenId?: string): Promise<Egress> {
 	const alive = proxies.filter((entry) => (failures.get(entry.url)?.cooldownUntil ?? 0) <= now);
 	const pool = alive.length > 0 ? alive : proxies;
 	const picked = pool[hash(tokenId) % pool.length];
+	const proxyUrl = stabilizeProxyUrl(picked.url);
 
-	return { key: picked.url, proxyUrl: picked.url };
+	// Một token phải luôn đi ra từ cùng một IP. Nếu IP đổi giữa phiên thì đó là
+	// dấu hiệu token sắp bị Discord vô hiệu, nên ghi lại để còn thấy trong log.
+	void watchIp(tokenId, proxyUrl);
+
+	return { key: proxyUrl, proxyUrl };
 }
 
 /** Ghi nhận một lần hỏng để tạm loại proxy đó khỏi vòng chọn. */
@@ -60,6 +80,34 @@ export function noteEgressFailure(key: string, ms = 60_000): void {
 		return;
 	}
 	failures.set(key, { cooldownUntil: Date.now() + ms });
+}
+
+const seenIp = new Map<string, { ip: string; at: number }>();
+
+/** Theo dõi IP ra của từng tài khoản, cảnh báo khi nó nhảy. */
+async function watchIp(tokenId: string, proxyUrl: string): Promise<void> {
+	const now = Date.now();
+	const previous = seenIp.get(tokenId);
+	if (previous && now - previous.at < 10 * 60 * 1000) return;
+
+	try {
+		const { ProxyAgent, fetch: undiciFetch } = await import('undici');
+		const res = await undiciFetch('https://api.ipify.org?format=json', {
+			dispatcher: new ProxyAgent(proxyUrl),
+			signal: AbortSignal.timeout(8000),
+		});
+		const body = (await res.json()) as { ip?: string };
+		const ip = body.ip?.trim();
+		if (!ip) return;
+		if (previous && previous.ip !== ip) {
+			logger.warn(
+				`Tài khoản ${tokenId.slice(0, 6)} đổi IP ra ${previous.ip} → ${ip}; nên dùng proxy giữ phiên lâu hơn.`,
+			);
+		}
+		seenIp.set(tokenId, { ip, at: now });
+	} catch {
+		/* đo IP lỗi thì bỏ qua, không ảnh hưởng request thật */
+	}
 }
 
 export function egressFailures(): { key: string; cooldownMs: number }[] {

@@ -333,6 +333,29 @@ PROXY_LIST_URL=https://raw.githubusercontent.com/<you>/<repo>/main/proxies.txt
 `PROXY_LIST` carries the same lines inline, newline separated, for hosts with no
 disk to keep a file on.
 
+## Keeping tokens alive
+
+Discord invalidates a user token when it stops believing the session is really that
+person. In practice these are the triggers, in order of how often they bite:
+
+1. **The token appears somewhere public.** Discord scans GitHub, pastebins and chat
+   for token-shaped strings and revokes what it finds, within seconds. Never paste a
+   token into chat, an issue, a commit or a screenshot.
+2. **The same token shows up from several IPs or countries at once.** Two processes
+   using one token, a proxy pool that hands out a new exit IP per request, or REST on
+   one IP while the socket sits on another. This is what "revoked" usually means.
+3. **Two gateway connections identify with one token.** Running the bot twice, or
+   running the CLI locally while the hosted copy is up, invalidates the session.
+4. **The client identity disagrees with itself.** A browser UA on REST while the
+   socket claims Electron, or a different locale/timezone per request.
+
+What this repo does about it: each account is hashed onto one proxy and keeps it, the
+proxy session lifetime is stretched to `PROXY_SESSION_LIFE` (default `30m`, set it to
+`''` to leave the list untouched) so the exit IP does not rotate every few minutes,
+a token whose exit IP changes is logged, and every request for an account carries the
+same stored fingerprint. One hosted instance per token is on you: do not run the CLI
+and the hosted copy at the same time.
+
 ## Running many accounts at once
 
 Every request to Discord passes a shared gate keyed by the IP it leaves from, so a
