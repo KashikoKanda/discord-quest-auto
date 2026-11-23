@@ -16,6 +16,12 @@ import { logger } from '../core/logger';
 const MAX_AGE_MS = 15 * 60 * 1000;
 const sessions = new Map<string, { quests: HiddenQuest[]; at: number }>();
 
+/**
+ * Quest đang được nhận. Bấm lần hai trong lúc request còn chạy thì bỏ qua, tránh
+ * gửi trùng request enroll (Discord trả lỗi và dễ bị coi là spam).
+ */
+const enrolling = new Set<string>();
+
 /** Số phiên giữ cùng lúc; quá thì bỏ phiên cũ nhất để bộ nhớ không phình. */
 const MAX_SESSIONS = 500;
 
@@ -196,10 +202,21 @@ export async function handleHiddenButton(interaction: GatewayInteraction): Promi
 
 	if (action === 'enroll') {
 		const quest = quests[index];
-		const result = await QuestWorker.enrollHidden(account.tokenId, quest.id).catch((error: Error) => ({
-			success: false,
-			message: error.message,
-		}));
+		const lock = `${userId}|${quest.id}`;
+
+		// Đang nhận rồi thì không nhận lại: chỉ nhắc riêng, không đụng tin nhắn chính.
+		if (enrolling.has(lock)) {
+			await followUp(interaction.token, {
+				embeds: [{ color: 0xfaa61a, description: '⏳ Đang nhận quest này rồi, chờ chút.' }],
+				flags: EPHEMERAL,
+			}).catch(() => null);
+			return;
+		}
+
+		enrolling.add(lock);
+		const result = await QuestWorker.enrollHidden(account.tokenId, quest.id)
+			.catch((error: Error) => ({ success: false, message: error.message }))
+			.finally(() => enrolling.delete(lock));
 
 		if (result.success) {
 			// Quest đã nhận thì rời khỏi danh sách ẩn và không còn nút nhận.
