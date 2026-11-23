@@ -34,6 +34,8 @@ export interface CatalogQuest {
 	orbs: number;
 	/** Tên phần quà Discord ghi trong rewards_config, ví dụ "150 Orbs". */
 	reward: string;
+	/** Ảnh quà thật trên CDN Discord (đổi ?format=png là ra PNG). */
+	rewardAsset: string | null;
 	/** Đường dẫn ảnh bìa trên cdn.discordapp.com, ví dụ quests/<id>/<file>.jpg */
 	hero: string | null;
 	raw: Record<string, unknown>;
@@ -163,6 +165,7 @@ function normalize(raw: Record<string, unknown>): CatalogQuest {
 		link: application.link ?? null,
 		orbs: Number(reward.orb_quantity ?? 0) || 0,
 		reward: String((reward.messages as Record<string, string> | undefined)?.name ?? '') || '',
+		rewardAsset: reward.asset ? String(reward.asset) : null,
 		hero: (config.assets?.hero as string | undefined) ?? null,
 		raw,
 	};

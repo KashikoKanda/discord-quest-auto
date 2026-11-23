@@ -22,6 +22,8 @@ export interface CardQuest {
 	orbs?: number;
 	/** Tên phần quà Discord ghi, ví dụ "150 Orbs". */
 	reward?: string;
+	/** Đường dẫn ảnh quà trên CDN Discord, dạng quests/<id>/<file>.mp4 */
+	rewardAsset?: string | null;
 }
 
 export interface GridResult {
@@ -114,6 +116,23 @@ async function fetchHero(hero: string | null): Promise<Buffer | null> {
 		});
 		if (!res.ok) return null;
 		return Buffer.from(await res.arrayBuffer());
+	} catch {
+		return null;
+	}
+}
+
+/** Ảnh quà thật của Discord; ?format=png đổi video/asset sang PNG. */
+async function fetchRewardAsset(path: string | null | undefined, size: number): Promise<Buffer | null> {
+	if (!path) return null;
+	try {
+		const url = path.startsWith('http') ? path : `${CDN}/${path}?format=png`;
+		const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+		if (!res.ok) return null;
+		const raw = Buffer.from(await res.arrayBuffer());
+		return await sharp(raw)
+			.resize(size, size, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+			.png()
+			.toBuffer();
 	} catch {
 		return null;
 	}
@@ -285,11 +304,20 @@ export async function renderQuestCard(
 </svg>`);
 
 	// Khung cuối = ảnh bìa phía trên + dải chữ phía dưới, không thêm khoảng trống.
+	const layers: { input: Buffer; top: number; left: number }[] = [
+		{ input: art, top: 0, left: 0 },
+		{ input: overlay, top: 0, left: 0 },
+	];
+
+	// Ảnh quà thật của Discord đè lên chỗ quả cầu vẽ tay, nếu quest có asset.
+	const iconSize = Math.round(orbH - 6);
+	const rewardIcon = await fetchRewardAsset(quest.rewardAsset, iconSize);
+	if (rewardIcon) {
+		layers.push({ input: rewardIcon, top: orbY + 3, left: orbX + 4 });
+	}
+
 	return sharp({ create: { width, height, channels: 3, background: { r: 20, g: 21, b: 26 } } })
-		.composite([
-			{ input: art, top: 0, left: 0 },
-			{ input: overlay, top: 0, left: 0 },
-		])
+		.composite(layers)
 		.png({ compressionLevel: 9 })
 		.toBuffer();
 }
