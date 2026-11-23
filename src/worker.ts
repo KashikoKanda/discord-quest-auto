@@ -460,6 +460,22 @@ export const QuestWorker = {
 		const regions = await fetchRegions().catch(() => new Map());
 		const region = regions.get(questId);
 		const country = region && region.include.length > 0 ? region.include[0] : null;
+		// Chặn đổi nước: token đang sống ở IP của bot, nhận quest khoá nước khác là xuất
+		// hiện ở hai IP khác nước trong vài giây — đúng mẫu khiến Discord thu hồi token.
+		const { directEgress, allowRegionHop } = await import('./core/egress');
+		const home = await directEgress();
+		if (country && home.country && country.toUpperCase() !== home.country && !allowRegionHop()) {
+			addLog(
+				tokenId,
+				'warn',
+				`Quest ${questId} khoá ${country.toUpperCase()} nhưng phiên đang ở ${home.country}; không nhận để giữ token (ALLOW_REGION_HOP=1 nếu vẫn muốn).`,
+			);
+			return {
+				success: false,
+				message: `Quest chỉ nhận từ ${country.toUpperCase()}, phiên đang ở ${home.country} · nhận sẽ đổi IP và dễ mất token`,
+			};
+		}
+
 		// Proxy chỉ sống trong đúng request enroll: mở theo nước của quest, dùng xong
 		// đóng luôn, không duy trì và không ghim vào token.
 		const factory = await openProxy(tokenId, country).catch(() => null);
