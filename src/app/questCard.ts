@@ -18,6 +18,8 @@ export interface CardQuest {
 	/** Nhãn vùng hoặc ghi chú ngắn hiển thị dưới tên. */
 	tag: string;
 	hero: string | null;
+	/** Số orbs thưởng; 0 là không rõ. */
+	orbs?: number;
 }
 
 export interface GridResult {
@@ -42,6 +44,16 @@ function escapeXml(text: string): string {
 function clip(text: string, max: number): string {
 	const clean = text.replace(/\s+/g, ' ').trim();
 	return clean.length <= max ? clean : `${clean.slice(0, max - 1).trimEnd()}…`;
+}
+
+/** Màu khung theo mức thưởng, để nhìn ảnh là biết quest đáng hay không. */
+function rewardColor(orbs: number | undefined): string {
+	const value = orbs ?? 0;
+	if (value >= 500) return '#f0b232';
+	if (value >= 250) return '#a78bfa';
+	if (value >= 100) return '#60a5fa';
+	if (value > 0) return '#4ade80';
+	return '#3f4147';
 }
 
 function metaLine(quest: CardQuest): string {
@@ -230,6 +242,15 @@ export async function renderQuestCard(
 	const metaText = escapeXml(clip(subtitle, 74));
 	const badge = `${options.index + 1}/${options.total}`;
 
+	// Khung viền + huy hiệu orbs: biểu tượng là vòng tròn phát sáng như orbs Discord.
+	const accent = rewardColor(quest.orbs);
+	const orbFont = Math.round(width * 0.026);
+	const orbH = Math.round(orbFont * 1.9);
+	const orbW = Math.round(width * 0.135);
+	const orbX = Math.round(width * 0.028);
+	const orbY = Math.round(width * 0.028);
+	const orbText = quest.orbs && quest.orbs > 0 ? String(quest.orbs) : '';
+
 	const overlay = Buffer.from(`
 <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
 	<defs>
@@ -242,6 +263,15 @@ export async function renderQuestCard(
 	<rect x="0" y="${artHeight}" width="${width}" height="${panelH}" fill="#14151a"/>
 	<rect x="${badgeX}" y="${badgeY}" width="${badgeW}" height="${badgeH}" rx="${badgeH / 2}" fill="#000000" fill-opacity="0.6"/>
 	<text x="${badgeX + badgeW / 2}" y="${badgeY + badgeH * 0.68}" text-anchor="middle" font-family="DejaVu Sans, Noto Sans, Noto Sans Thai, Noto Sans CJK JP, sans-serif" font-size="${badgeFont}" fill="#ffffff">${badge}</text>
+	<rect x="0.5" y="0.5" width="${width - 1}" height="${height - 1}" fill="none" stroke="${accent}" stroke-width="3" rx="2"/>
+	${
+		orbText
+			? `<rect x="${orbX}" y="${orbY}" width="${orbW}" height="${orbH}" rx="${orbH / 2}" fill="#000000" fill-opacity="0.62" stroke="${accent}" stroke-opacity="0.85"/>
+	<circle cx="${orbX + orbH * 0.62}" cy="${orbY + orbH / 2}" r="${orbFont * 0.42}" fill="${accent}"/>
+	<circle cx="${orbX + orbH * 0.62 - orbFont * 0.12}" cy="${orbY + orbH / 2 - orbFont * 0.12}" r="${orbFont * 0.16}" fill="#ffffff" fill-opacity="0.75"/>
+	<text x="${orbX + orbH * 1.15}" y="${orbY + orbH * 0.69}" font-family="DejaVu Sans, Noto Sans, Noto Sans Thai, Noto Sans CJK JP, sans-serif" font-size="${orbFont}" font-weight="bold" fill="#ffffff">${orbText}</text>`
+			: ''
+	}
 	<text x="${padX}" y="${artHeight + Math.round(nameFont * 1.3)}" font-family="DejaVu Sans, Noto Sans, Noto Sans Thai, Noto Sans CJK JP, sans-serif" font-size="${nameFont}" font-weight="bold" fill="#ffffff">${name}</text>
 	<text x="${padX}" y="${artHeight + Math.round(nameFont * 1.3 + metaFont * 1.85)}" font-family="DejaVu Sans, Noto Sans, Noto Sans Thai, Noto Sans CJK JP, sans-serif" font-size="${metaFont}" fill="#c9ced8">${metaText}</text>
 </svg>`);

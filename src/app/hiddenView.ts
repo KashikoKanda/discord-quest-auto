@@ -8,7 +8,7 @@
 import type { HiddenQuest } from '../api/catalog';
 import type { GatewayInteraction } from './interface';
 import { renderQuestCard } from './questCard';
-import { editOriginalWithFile, EPHEMERAL, followUp, replyInteraction } from './rest';
+import { editOriginal, editOriginalWithFile, EPHEMERAL, followUp, replyInteraction } from './rest';
 import { getAccount } from './store';
 import { QuestWorker } from '../worker';
 import { logger } from '../core/logger';
@@ -102,6 +102,7 @@ export async function hiddenPageBody(
 	quests: HiddenQuest[],
 	index: number,
 	note?: string,
+	options: { enrolled?: boolean } = {},
 ): Promise<Record<string, unknown> & { file: Buffer }> {
 	const quest = quests[index];
 	const fields = cardFields(quest);
@@ -113,6 +114,7 @@ export async function hiddenPageBody(
 			type: quest.type,
 			tag: fields.note,
 			hero: quest.hero,
+			orbs: quest.orbs,
 		},
 		{ index, total: quests.length },
 	);
@@ -121,24 +123,36 @@ export async function hiddenPageBody(
 	// nói được: quest khoá vùng nào, và kết quả lần nhận vừa rồi.
 	const lines: string[] = [];
 	if (!(fields.region === 'toàn cầu')) lines.push(`🌍 Vùng \`${fields.region}\``);
+	// Quest khoá vùng mà tài khoản ở nước khác thì nhận sẽ đổi IP, dễ mất token.
+	if (!quest.enrollable) lines.push(`⚠️ ${quest.reason}`);
 	if (note) lines.push(note);
+
+	const rows: Record<string, unknown>[] = [pickMenu(quests, index)];
+	// Đã nhận rồi thì bỏ hẳn nút, không để bấm lại thành spam.
+	if (!options.enrolled) rows.push(...buttons(index, note));
 
 	return {
 		embeds: [
 			{
-				color: 0x5865f2,
+				color: quest.enrollable ? 0x5865f2 : 0xed4245,
 				description: lines.join('\n') || undefined,
 				image: { url: 'attachment://quest-hidden.png' },
 			},
 		],
-		components: [pickMenu(quests, index), ...buttons(index, note)],
+		components: rows,
 		attachments: [{ id: 0, filename: 'quest-hidden.png', description: quest.name.slice(0, 100) }],
 		file: png,
 	};
 }
 
-export async function sendHiddenPage(interactionToken: string, quests: HiddenQuest[], index: number, note?: string) {
-	const { file, ...body } = await hiddenPageBody(quests, index, note);
+export async function sendHiddenPage(
+	interactionToken: string,
+	quests: HiddenQuest[],
+	index: number,
+	note?: string,
+	options: { enrolled?: boolean } = {},
+) {
+	const { file, ...body } = await hiddenPageBody(quests, index, note, options);
 	await editOriginalWithFile(interactionToken, body, { name: 'quest-hidden.png', data: file });
 }
 
@@ -184,12 +198,30 @@ export async function handleHiddenButton(interaction: GatewayInteraction): Promi
 			success: false,
 			message: error.message,
 		}));
-		await sendHiddenPage(
-			interaction.token,
-			quests,
-			index,
-			result.success ? '✔ đã nhận' : `✖ ${result.message}`,
-		).catch((error: Error) => logger.warn(`Không cập nhật được trang quest ẩn: ${error.message}`));
+
+		if (result.success) {
+			// Quest đã nhận thì rời khỏi danh sách ẩn và không còn nút nhận.
+			const at = quests.findIndex((item) => item.id === quest.id);
+			if (at >= 0) quests.splice(at, 1);
+
+			if (quests.length === 0) {
+				await editOriginal(interaction.token, {
+					embeds: [{ color: 0x57f287, description: '✔ Đã nhận hết quest ẩn trong danh sách.' }],
+					components: [],
+					attachments: [],
+				}).catch(() => undefined);
+				return;
+			}
+
+			await sendHiddenPage(interaction.token, quests, Math.min(index, quests.length - 1), '✔ đã nhận').catch(
+				(error: Error) => logger.warn(`Không cập nhật được trang quest ẩn: ${error.message}`),
+			);
+			return;
+		}
+
+		await sendHiddenPage(interaction.token, quests, index, `✖ ${result.message}`).catch((error: Error) =>
+			logger.warn(`Không cập nhật được trang quest ẩn: ${error.message}`),
+		);
 		return;
 	}
 }
