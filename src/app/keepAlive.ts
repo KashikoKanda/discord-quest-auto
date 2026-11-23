@@ -9,6 +9,7 @@
  */
 
 import http from 'node:http';
+import { authorizeUrl, exchangeAndProbe, resultPage } from './oauthProbe';
 import https from 'node:https';
 
 const PING_EVERY_MS = 3 * 60 * 1000;
@@ -25,7 +26,7 @@ export function startKeepAlive(options: KeepAliveOptions): { stop: () => void } 
 	const externalUrl = process.env.RENDER_EXTERNAL_URL?.trim();
 	const startedAt = Date.now();
 
-	const server = http.createServer((req, res) => {
+	const server = http.createServer(async (req, res) => {
 		const url = new URL(req.url ?? '/', `http://localhost:${port}`);
 
 		if (url.pathname === '/health' || url.pathname === '/' || url.pathname === '/healthz') {
@@ -40,6 +41,33 @@ export function startKeepAlive(options: KeepAliveOptions): { stop: () => void } 
 			res.end(JSON.stringify(body));
 			return;
 		}
+		// Thử OAuth2 của app bot: bấm authorize rồi xem API quest có chấp nhận không.
+		const base = externalUrl ?? `http://localhost:${port}`;
+		if (url.pathname === '/oauth/test') {
+			const { url: target } = authorizeUrl(base);
+			res.writeHead(302, { Location: target });
+			res.end();
+			return;
+		}
+
+		if (url.pathname === '/oauth/callback') {
+			const code = url.searchParams.get('code') ?? '';
+			if (!code) {
+				res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+				res.end('Thiếu code từ Discord');
+				return;
+			}
+			const result = await exchangeAndProbe(base, code);
+			if ('error' in result) {
+				res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+				res.end(result.error);
+				return;
+			}
+			res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+			res.end(resultPage(result));
+			return;
+		}
+
 		res.writeHead(404, { 'Content-Type': 'text/plain' });
 		res.end('Not Found');
 	});
