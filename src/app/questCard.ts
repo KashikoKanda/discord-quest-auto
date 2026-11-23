@@ -9,6 +9,8 @@
 import sharp from 'sharp';
 
 const CDN = 'https://cdn.discordapp.com';
+// Icon orbs thật của Discord (discordquest.com phục vụ sẵn dạng webp).
+const ORBS_ICON = 'https://discordquest.com/discord/quests/orbs.webp';
 
 export interface CardQuest {
 	id: string;
@@ -121,11 +123,20 @@ async function fetchHero(hero: string | null): Promise<Buffer | null> {
 	}
 }
 
-/** Ảnh quà thật của Discord; ?format=png đổi video/asset sang PNG. */
-async function fetchRewardAsset(path: string | null | undefined, size: number): Promise<Buffer | null> {
-	if (!path) return null;
+/**
+ * Ảnh quà thật của Discord; ?format=png đổi video/asset sang PNG.
+ * Quest orbs không có asset riêng nên dùng icon orbs của Discord.
+ */
+async function fetchRewardAsset(path: string | null | undefined, size: number, orbs?: number): Promise<Buffer | null> {
+	const url = path
+		? path.startsWith('http')
+			? path
+			: `${CDN}/${path}?format=png`
+		: orbs && orbs > 0
+			? ORBS_ICON
+			: null;
+	if (!url) return null;
 	try {
-		const url = path.startsWith('http') ? path : `${CDN}/${path}?format=png`;
 		const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
 		if (!res.ok) return null;
 		const raw = Buffer.from(await res.arrayBuffer());
@@ -311,7 +322,7 @@ export async function renderQuestCard(
 
 	// Ảnh quà thật của Discord đè lên chỗ quả cầu vẽ tay, nếu quest có asset.
 	const iconSize = Math.round(orbH - 6);
-	const rewardIcon = await fetchRewardAsset(quest.rewardAsset, iconSize);
+	const rewardIcon = await fetchRewardAsset(quest.rewardAsset, iconSize, quest.orbs);
 	if (rewardIcon) {
 		layers.push({ input: rewardIcon, top: orbY + 3, left: orbX + 4 });
 	}
