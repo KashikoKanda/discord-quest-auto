@@ -115,6 +115,7 @@ export async function hiddenPageBody(
 			tag: fields.note,
 			hero: quest.hero,
 			orbs: quest.orbs,
+			reward: quest.reward,
 		},
 		{ index, total: quests.length },
 	);

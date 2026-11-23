@@ -20,6 +20,8 @@ export interface CardQuest {
 	hero: string | null;
 	/** Số orbs thưởng; 0 là không rõ. */
 	orbs?: number;
+	/** Tên phần quà Discord ghi, ví dụ "150 Orbs". */
+	reward?: string;
 }
 
 export interface GridResult {
@@ -246,14 +248,20 @@ export async function renderQuestCard(
 	const accent = rewardColor(quest.orbs);
 	const orbFont = Math.round(width * 0.026);
 	const orbH = Math.round(orbFont * 1.9);
-	const orbW = Math.round(width * 0.135);
+	const orbW = Math.round(width * 0.26);
 	const orbX = Math.round(width * 0.028);
 	const orbY = Math.round(width * 0.028);
-	const orbText = quest.orbs && quest.orbs > 0 ? String(quest.orbs) : '';
+	// Ưu tiên tên quà Discord trả về ("150 Orbs"), không có thì lấy con số.
+	const orbText = (quest.reward || (quest.orbs && quest.orbs > 0 ? String(quest.orbs) : '')).slice(0, 22);
 
 	const overlay = Buffer.from(`
 <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
 	<defs>
+		<radialGradient id="orb" cx="35%" cy="30%" r="72%">
+			<stop offset="0%" stop-color="#ffffff" stop-opacity="0.95"/>
+			<stop offset="28%" stop-color="${accent}" stop-opacity="0.98"/>
+			<stop offset="100%" stop-color="#1a1b20" stop-opacity="1"/>
+		</radialGradient>
 		<linearGradient id="shade" x1="0" y1="0" x2="0" y2="1">
 			<stop offset="0%" stop-color="#000000" stop-opacity="0.55"/>
 			<stop offset="45%" stop-color="#000000" stop-opacity="0"/>
@@ -267,8 +275,8 @@ export async function renderQuestCard(
 	${
 		orbText
 			? `<rect x="${orbX}" y="${orbY}" width="${orbW}" height="${orbH}" rx="${orbH / 2}" fill="#000000" fill-opacity="0.62" stroke="${accent}" stroke-opacity="0.85"/>
-	<circle cx="${orbX + orbH * 0.62}" cy="${orbY + orbH / 2}" r="${orbFont * 0.42}" fill="${accent}"/>
-	<circle cx="${orbX + orbH * 0.62 - orbFont * 0.12}" cy="${orbY + orbH / 2 - orbFont * 0.12}" r="${orbFont * 0.16}" fill="#ffffff" fill-opacity="0.75"/>
+	<circle cx="${orbX + orbH * 0.62}" cy="${orbY + orbH / 2}" r="${orbFont * 0.5}" fill="url(#orb)"/>
+	<ellipse cx="${orbX + orbH * 0.62 - orbFont * 0.14}" cy="${orbY + orbH / 2 - orbFont * 0.16}" rx="${orbFont * 0.17}" ry="${orbFont * 0.12}" fill="#ffffff" fill-opacity="0.85"/>
 	<text x="${orbX + orbH * 1.15}" y="${orbY + orbH * 0.69}" font-family="DejaVu Sans, Noto Sans, Noto Sans Thai, Noto Sans CJK JP, sans-serif" font-size="${orbFont}" font-weight="bold" fill="#ffffff">${orbText}</text>`
 			: ''
 	}
