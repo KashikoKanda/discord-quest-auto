@@ -6,16 +6,10 @@ import { logger } from '../core/logger';
 import type { CommandName, GatewayInteraction } from './interface';
 import { editOriginal, editOriginalWithFile, EPHEMERAL, followUp, replyInteraction } from './rest';
 import { handleHiddenButton, isHiddenButton, rememberHidden, sendHiddenPage } from './hiddenView';
-import { handleQrCommand } from './qrCommand';
 import { getAccount, linkAccount, setAuto, unlinkAccount } from './store';
 
 export const commandDefs = [
 	{ name: 'help', description: 'Cách dùng bot quest', type: 1 },
-	{
-		name: 'login',
-		description: 'Đăng nhập tài khoản qua Discord, không cần dán token',
-		type: 1,
-	},
 	{
 		name: 'link',
 		description: 'Liên kết tài khoản Discord bằng token (tin nhắn riêng tư)',
@@ -590,12 +584,6 @@ export async function handleInteraction(interaction: GatewayInteraction): Promis
 				removed ? `Tài khoản **${removed.username}** đã được gỡ khỏi bot.` : 'Bạn chưa `/link` tài khoản nào.',
 				removed ? 0x57f287 : 0xfaa61a,
 			);
-			return;
-		}
-
-		if (command === 'login') {
-			await replyInteraction(interaction.id, interaction.token, { type: 5, data: { flags: EPHEMERAL } });
-			await handleQrCommand(interaction);
 			return;
 		}
 

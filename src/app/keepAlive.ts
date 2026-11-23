@@ -10,7 +10,6 @@
 
 import http from 'node:http';
 import https from 'node:https';
-import { captchaPage, submitManualTicket } from '../api/captcha';
 
 const PING_EVERY_MS = 3 * 60 * 1000;
 
@@ -28,40 +27,6 @@ export function startKeepAlive(options: KeepAliveOptions): { stop: () => void } 
 
 	const server = http.createServer((req, res) => {
 		const url = new URL(req.url ?? '/', `http://localhost:${port}`);
-
-		// Trang cho người dùng tự giải captcha Discord.
-		if (req.method === 'GET' && url.pathname === '/captcha') {
-			const id = url.searchParams.get('id') ?? '';
-			const html = captchaPage(id);
-			console.log(`[captcha] mở trang · ${html ? 'vé hợp lệ' : 'vé hết hạn'}`);
-			res.writeHead(html ? 200 : 410, { 'Content-Type': 'text/html; charset=utf-8' });
-			res.end(
-				html ??
-					'<!doctype html><meta charset="utf-8"><body style="font:16px system-ui;background:#1e1f22;color:#dbdee1;display:grid;place-items:center;height:100vh;margin:0">Vé đã hết hạn, chạy /login lại trong Discord.</body>',
-			);
-			return;
-		}
-
-		if (req.method === 'POST' && url.pathname === '/captcha') {
-			let raw = '';
-			req.on('data', (chunk) => {
-				raw += chunk;
-				if (raw.length > 20_000) req.destroy();
-			});
-			req.on('end', () => {
-				let ok = false;
-				try {
-					const body = JSON.parse(raw) as { id?: string; token?: string };
-					ok = Boolean(body.id && body.token && submitManualTicket(body.id, body.token));
-				} catch {
-					ok = false;
-				}
-				console.log(`[captcha] nhận token · ${ok ? 'ok' : 'vé hết hạn hoặc sai'}`);
-				res.writeHead(ok ? 200 : 410, { 'Content-Type': 'application/json' });
-				res.end(JSON.stringify({ ok }));
-			});
-			return;
-		}
 
 		if (url.pathname === '/health' || url.pathname === '/' || url.pathname === '/healthz') {
 			const gateway = options.status();

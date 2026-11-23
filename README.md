@@ -416,9 +416,92 @@ compactly, pruned at startup for accounts that are gone, and quest state is flus
 every 200 ms through a temp file and rename, so concurrent workers cannot truncate
 each other's progress.
 
+## ResiFactory proxies, one request at a time
+
+Hidden-quest enroll asks ResiFactory for a residential proxy in the quest's country,
+uses it for that single enroll call, then drops it. Nothing is kept, nothing is pinned
+to the token, so an account does not burn bandwidth on requests that never needed a
+different IP.
+
+```bash
+RF_API_TOKEN=rf_live_...      # ResiFactory API key
+RF_POOL=walmart_premium       # pool with sticky sessions
+RF_SESSION_MINUTES=60         # how long the generated session lives
+```
+
+Country codes are normalised to ISO 3166-1 alpha-2 before the call (`UK` becomes
+`GB`, `EU` becomes `DE`), because the API rejects anything else with a 422. If the
+factory returns nothing (empty wallet, unknown country), the static list is used as a
+fallback, and if that is empty too the enroll fails rather than silently retrying from
+the bot's own address.
+
+## Where the proxy is allowed to be used
+
+Proxy bandwidth is the expensive part, so it is not on by default:
+
+- **Hidden-quest enroll** picks a proxy tagged with the quest's country for that one
+  request, then the account goes back to its normal exit. If that proxy fails, the
+  enroll fails; it is not retried directly, because the same token on two IPs a
+  second apart is what gets tokens revoked.
+- **`/link`** verifies directly from the bot's own address: one address for one token
+  is the safe shape, and it keeps proxy spend to the enroll requests only.
+- **Everything else** (quests, progress ticks, claim) runs from the bot's own stable
+  address. One address for one token is safe; it is hopping between addresses that
+  is not.
+
+Set `PROXY_PER_ACCOUNT=1` to pin every account to its own proxy again, at the cost of
+sending all quest traffic through paid bandwidth.
+
+## Keeping tokens alive
+
+Discord invalidates a user token when it stops believing the session is really that
+person. In practice these are the triggers, in order of how often they bite:
+
+1. **The token appears somewhere public.** Discord scans GitHub, pastebins and chat
+   for token-shaped strings and revokes what it finds, within seconds. Never paste a
+   token into chat, an issue, a commit or a screenshot.
+2. **The same token shows up from several IPs or countries at once.** Two processes
+   using one token, a proxy pool that hands out a new exit IP per request, or REST on
+   one IP while the socket sits on another. This is what "revoked" usually means.
+3. **Two gateway connections identify with one token.** Running the bot twice, or
+   running the CLI locally while the hosted copy is up, invalidates the session.
+4. **The client identity disagrees with itself.** A browser UA on REST while the
+   socket claims Electron, or a different locale/timezone per request.
+
+What this repo does about it: each account is hashed onto one proxy and keeps it, the
+proxy session lifetime is stretched to `PROXY_SESSION_LIFE` (default `30m`, set it to
+`''` to leave the list untouched) so the exit IP does not rotate every few minutes,
+a token whose exit IP changes is logged, and every request for an account carries the
+same stored fingerprint. One hosted instance per token is on you: do not run the CLI
+and the hosted copy at the same time.
+
+## Running many accounts at once
+
+Every request to Discord passes a shared gate keyed by the IP it leaves from, so a
+hundred accounts do not turn into a burst from one address:
+
+```bash
+GATE_DIRECT_CONCURRENCY=4     # requests in flight on the direct connection
+GATE_DIRECT_MIN_GAP_MS=250    # spacing between two starts
+GATE_PROXY_CONCURRENCY=2      # same, per proxy
+GATE_PROXY_MIN_GAP_MS=800
+```
+
+A 429 pauses that whole exit for as long as Discord asks, instead of each account
+retrying on its own. With proxies configured, an account is hashed onto one proxy
+and keeps using it, so it does not hop IPs between calls; a proxy that fails is
+skipped for a minute and the account moves to another.
+
+Each account already has its own stored fingerprint (browser version, OS build,
+locale, timezone, launch id, heartbeat session) reused on every request, so headers
+stay consistent instead of being randomised per call. The fingerprint file is written
+compactly, pruned at startup for accounts that are gone, and quest state is flushed
+every 200 ms through a temp file and rename, so concurrent workers cannot truncate
+each other's progress.
+
 ## Solving the login captcha
 
-Discord sometimes answers the remote-auth ticket exchange with an hCaptcha
+
 challenge. `/login` handles it two ways:
 
 - With a solver key the bot clears the challenge itself and retries on the same IP:

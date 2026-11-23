@@ -29,7 +29,6 @@ Lệnh
   run       làm toàn bộ quest đang có rồi tự nhận thưởng   (mặc định)
   list      liệt kê quest kèm tiến trình
   hidden    xem quest ẩn (có trong danh mục nhưng tài khoản không thấy)
-  login     đăng nhập tài khoản qua Discord (không cần dán token)
   proxy     xem danh sách proxy và nguồn tải
   claim     nhận thưởng cho quest đã hoàn thành
   auto      chạy nền, quét lại mỗi 5 phút
@@ -264,7 +263,7 @@ async function claimCompleted(token: string, tokenId: string): Promise<number> {
 }
 
 async function main(): Promise<void> {
-	const known = ['run', 'list', 'hidden', 'proxy', 'login', 'qr', 'claim', 'auto', 'status', 'stop', 'help'];
+	const known = ['run', 'list', 'hidden', 'proxy', 'claim', 'auto', 'status', 'stop', 'help'];
 	if (!known.includes(command)) {
 		logger.error(`Không có lệnh "${command}".`);
 		logger.blank();
@@ -335,48 +334,6 @@ async function main(): Promise<void> {
 		return;
 	}
 
-	if (command === 'login' || command === 'qr') {
-		const { startQrLogin } = await import('./src/api/qrAuth');
-		logger.header('Đăng nhập Discord', 'mở link bên dưới rồi xác nhận');
-
-		const chosen = flag('proxy');
-		const session = await startQrLogin(
-			{
-				onScanned: (username) =>
-					logger.info(
-						username
-							? `Đã quét bởi ${username}, xác nhận trên điện thoại.`
-							: 'Đã quét, xác nhận trên điện thoại.',
-					),
-			},
-			chosen ? { proxy: chosen } : {},
-		).catch((error: Error) => {
-			logger.error(error.message);
-			return null;
-		});
-		if (!session) {
-			process.exitCode = 1;
-			return;
-		}
-		logger.info(`Mở link này để xác nhận: https://discord.com/ra/${session.fingerprint}`);
-		logger.plain(`  IP phiên  ${session.ip ?? 'không xác định'} (${session.ipNote})`);
-		logger.plain(`  đi thẳng  ${session.directIp ?? 'không xác định'}`);
-		logger.info('Chờ tối đa 2 phút...');
-
-		const token = await session.wait.catch((error: Error) => {
-			logger.error(error.message);
-			return null;
-		});
-		if (!token) {
-			process.exitCode = 1;
-			return;
-		}
-		saveToken(token);
-		logger.success(`Đã lấy token và lưu vào .env (${token.length} ký tự, ${session.fingerprint.slice(0, 6)}…).`);
-		logger.info('Chạy tiếp: npm start');
-		return;
-	}
-
 	let token: string;
 	try {
 		token = getToken(flag('token'));
@@ -385,33 +342,6 @@ async function main(): Promise<void> {
 		if (!typed) throw error;
 		token = typed;
 		if (await confirm('Lưu token vào .env cho lần sau?')) saveToken(token);
-	}
-
-	if (command === 'status') {
-		const state = readState();
-		logger.header('Trạng thái');
-		logger.info(
-			state && isAlive(state.pid) ? `Đang chạy · pid ${state.pid} · ${state.mode}` : 'Không có tiến trình nền.',
-		);
-
-		const { fetchDiscordQuests } = await import('./src/api/client');
-		const { Quest } = await import('./src/quests/quest');
-		const tokenId = tokenIdFor(token);
-		let quests: QuestShape[];
-		try {
-			({ quests } = await fetchDiscordQuests(token, tokenId));
-		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error);
-			if (/401|Unauthorized/i.test(message)) {
-				throw new Error('Token không hợp lệ hoặc đã hết hạn. Sửa TOKEN trong .env.');
-			}
-			throw error;
-		}
-		const list = quests.map((q) => Quest.create(q));
-		logger.info(
-			`${list.filter((q) => q.isOpen()).length} quest cần làm · ${list.filter((q) => q.isCompleted() && !q.isClaimed()).length} chờ nhận`,
-		);
-		return;
 	}
 
 	const session = await prepare(token);
@@ -424,36 +354,10 @@ async function main(): Promise<void> {
 
 		logger.header(`Quest của @${session.user.username}`, session.isVerified ? '' : 'chưa ở server bắt buộc');
 		const { quests } = await fetchDiscordQuests(session.token, session.tokenId);
-		const rows = (quests as QuestShape[]).map((q) => Quest.create(q));
-		const visible = has('all') ? rows : rows.filter((q) => q.isOpen());
-
-		if (has('json')) {
-			logger.plain(
-				JSON.stringify(
-					visible.map((q) => ({
-						id: q.id,
-						type: q.type,
-						name: q.name,
-						progress: q.progress,
-						state: q.label(),
-					})),
-					null,
-					2,
-				),
-			);
-			return;
-		}
-
-		for (const quest of visible) {
-			const bar = '█'.repeat(Math.round(quest.progress / 10)).padEnd(10, '░');
-			logger.plain(
-				`  ${bar} ${String(Math.round(quest.progress)).padStart(3)}%  ${quest.label().padEnd(9)} ${quest.type.padEnd(22)} ${quest.name.slice(0, 42)}`,
-			);
-		}
-		const waiting = rows.filter((q) => q.isCompleted() && !q.isClaimed()).length;
-		if (visible.length === 0) logger.info('Không còn quest nào để làm.');
-		else logger.info(`Còn ${visible.length} quest cần làm${waiting ? ` · ${waiting} quest chờ nhận thưởng` : ''}.`);
-		if (waiting) logger.info('Nhận thưởng: npm run claim');
+		const list = quests.map((q) => Quest.create(q));
+		logger.info(
+			`${list.filter((q) => q.isOpen()).length} quest cần làm · ${list.filter((q) => q.isCompleted() && !q.isClaimed()).length} chờ nhận`,
+		);
 		return;
 	}
 
@@ -509,19 +413,7 @@ async function main(): Promise<void> {
 			logger.success(`Đã lưu ảnh ${grid.width}×${grid.height}: ${target}`);
 		}
 
-		const { loadProxies, proxySource } = await import('./src/core/proxies');
-		const proxies = await loadProxies().catch(() => []);
-		const source = proxySource();
-		if (proxies.length > 0) {
-			logger.info(`Proxy: ${proxies.length} đầu (${source.url ? 'từ PROXY_LIST_URL' : 'từ PROXY_LIST_FILE'}).`);
-		} else if (source.url || source.file) {
-			logger.warn('Nguồn proxy có cấu hình nhưng danh sách rỗng hoặc không tải được.');
-		} else {
-			logger.info('Chưa cấu hình proxy · đặt PROXY_LIST_URL (raw GitHub) để nhận quest khác vùng.');
-		}
-		logger.info(
-			`Nhận quest: npm start hidden --enroll=<id> (vùng ${country} · ${list.filter((q) => q.enrollable).length} quest nhận trực tiếp được)`,
-		);
+		logger.info(`Nhận quest: npm start hidden --enroll=<id> (vùng ${country})`);
 		return;
 	}
 
