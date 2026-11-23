@@ -4,6 +4,7 @@ import { loadFingerprint, saveFingerprint, deleteFingerprint } from '../core/sto
 import { API } from '../core/constants';
 import { withGate, gatePenalize } from '../core/gate';
 import { egressFor, noteEgressFailure } from '../core/affinity';
+import { activeProxy } from '../core/egressSwitch';
 import type { QuestListResponse, QuestShape } from '../core/interface';
 
 const DISCORD_API = API;
@@ -382,7 +383,10 @@ export async function discordFetch(
 	// tài khoản (affinity) và chịu cửa van chung để không dội IP.
 	const { proxyUrl: forcedProxy, ...rest } = options as RequestInit & { proxyUrl?: string };
 
-	const egress = forcedProxy ? { key: forcedProxy, proxyUrl: forcedProxy } : await egressFor(tokenId);
+	// Đang đổi IP (như VPN) thì mọi request của tài khoản đi đúng proxy đang gán,
+	// không xen IP cũ vào giữa.
+	const pinned = forcedProxy ?? activeProxy(tokenId) ?? undefined;
+	const egress = pinned ? { key: pinned, proxyUrl: pinned } : await egressFor(tokenId);
 
 	const send = async (): Promise<Response> => {
 		if (!egress.proxyUrl) return (await fetch(url, { ...rest, headers })) as Response;

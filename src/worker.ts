@@ -451,8 +451,6 @@ export const QuestWorker = {
 
 		const { enrollQuest } = await import('./api/client');
 		const { fetchCatalog, fetchRegions } = await import('./api/catalog');
-		const { pickProxy } = await import('./core/proxies');
-		const { openProxy, closeProxy } = await import('./core/proxyFactory');
 		const catalog = await fetchCatalog().catch(() => []);
 		const quest = catalog.find((item) => item.id === questId);
 
@@ -460,48 +458,24 @@ export const QuestWorker = {
 		const regions = await fetchRegions().catch(() => new Map());
 		const region = regions.get(questId);
 		const country = region && region.include.length > 0 ? region.include[0] : null;
-		// Chặn đổi nước: token đang sống ở IP của bot, nhận quest khoá nước khác là xuất
-		// hiện ở hai IP khác nước trong vài giây — đúng mẫu khiến Discord thu hồi token.
-		const { directEgress, allowRegionHop } = await import('./core/egress');
-		const home = await directEgress();
-		if (country && home.country && country.toUpperCase() !== home.country && !allowRegionHop()) {
-			addLog(
-				tokenId,
-				'warn',
-				`Quest ${questId} khoá ${country.toUpperCase()} nhưng phiên đang ở ${home.country}; không nhận để giữ token (ALLOW_REGION_HOP=1 nếu vẫn muốn).`,
-			);
-			return {
-				success: false,
-				message: `Quest chỉ nhận từ ${country.toUpperCase()}, phiên đang ở ${home.country} · nhận sẽ đổi IP và dễ mất token`,
-			};
-		}
+		// Đổi IP như VPN: cả tài khoản chuyển sang nước của quest, nhận xong trả về như
+		// cũ. Một IP tại một thời điểm nên Discord không thấy phiên bị đánh cắp.
+		const { withEgressCountry } = await import('./core/egressSwitch');
 
-		// Proxy chỉ sống trong đúng request enroll: mở theo nước của quest, dùng xong
-		// đóng luôn, không duy trì và không ghim vào token.
-		const factory = await openProxy(tokenId, country).catch(() => null);
-		const proxy = factory
-			? { url: factory.url, label: `ResiFactory ${factory.country.toUpperCase()}` }
-			: await pickProxy(country).catch(() => null);
-
-		const res = await enrollQuest(state.token, questId, false, tokenId, quest?.raw, proxy?.url).finally(() => {
-			// Đóng proxy ngay khi request xong, dù thành công hay lỗi.
-			if (factory) closeProxy(tokenId, factory.country);
-		});
+		const res = await withEgressCountry(tokenId, country, (proxyUrl) =>
+			enrollQuest(state.token, questId, false, tokenId, quest?.raw, proxyUrl ?? undefined),
+		);
 		const body = await res.text().catch(() => '');
-		const viaProxy = Boolean(proxy);
+		const viaProxy = Boolean(country);
 
-		// KHÔNG thử lại trực tiếp khi proxy hỏng: cùng một token xuất hiện ở hai IP
-		// trong vài giây chính là mẫu Discord coi là phiên bị đánh cắp. Thà báo lỗi.
-		if (!res.ok && proxy && (res.status === 403 || res.status === 429 || body.includes('260008'))) {
-			addLog(
-				tokenId,
-				'warn',
-				`Proxy ${proxy.label} không nhận được quest ${questId}; giữ nguyên IP, không thử trực tiếp.`,
-			);
+		// Không thử lại trực tiếp khi lỗi: đang ở IP của nước quest mà quay sang IP cũ
+		// trong vài giây là mẫu khiến Discord thu hồi token.
+		if (!res.ok && country && (res.status === 403 || res.status === 429 || body.includes('260008'))) {
+			addLog(tokenId, 'warn', `Quest ${questId} không nhận được từ ${country.toUpperCase()}; giữ nguyên IP.`);
 		}
 
 		if (res.ok || res.status === 204) {
-			const via = viaProxy && proxy ? ` qua ${proxy.label}` : '';
+			const via = viaProxy ? ` từ IP ${country.toUpperCase()}` : '';
 			addLog(tokenId, 'success', `Đã nhận quest ẩn ${quest?.name ?? questId}${via}`);
 			return { success: true, message: `Đã nhận ${quest?.name ?? questId}${via}` };
 		}
