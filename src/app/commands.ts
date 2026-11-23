@@ -198,7 +198,14 @@ async function handleLinkModal(interaction: GatewayInteraction): Promise<void> {
 	}
 
 	try {
-		const profile = await getDiscordProfile(token);
+		// Xác thực bằng đúng tokenId sẽ dùng về sau, để fingerprint lúc /link trùng với
+		// fingerprint lúc chạy quest (trước đây mỗi bên một bộ, Discord thấy hai client).
+		const tokenId = tokenIdFor(token);
+		const { pickProxy } = await import('../core/proxies');
+		// Login được phép đi proxy để nhiều tài khoản không dồn một IP; proxy chỉ dùng
+		// cho vài request xác thực nên tốn rất ít dung lượng.
+		const proxy = await pickProxy(null).catch(() => null);
+		const profile = await getDiscordProfile(token, tokenId, proxy?.url);
 		const username = profile.user?.username ?? 'không rõ';
 		const account = linkAccount(discordUserId, token, username, profile.user?.id ?? '');
 		QuestWorker.registerToken(account.tokenId, token, false);

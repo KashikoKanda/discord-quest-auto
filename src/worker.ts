@@ -461,14 +461,18 @@ export const QuestWorker = {
 		const country = region && region.include.length > 0 ? region.include[0] : null;
 		const proxy = await pickProxy(country).catch(() => null);
 
-		let res = await enrollQuest(state.token, questId, false, tokenId, quest?.raw, proxy?.url);
-		let body = await res.text().catch(() => '');
+		const res = await enrollQuest(state.token, questId, false, tokenId, quest?.raw, proxy?.url);
+		const body = await res.text().catch(() => '');
 		const viaProxy = Boolean(proxy);
+
+		// KHÔNG thử lại trực tiếp khi proxy hỏng: cùng một token xuất hiện ở hai IP
+		// trong vài giây chính là mẫu Discord coi là phiên bị đánh cắp. Thà báo lỗi.
 		if (!res.ok && proxy && (res.status === 403 || res.status === 429 || body.includes('260008'))) {
-			// Proxy hỏng hoặc sai vùng: thử lại trực tiếp để không mất lượt.
-			addLog(tokenId, 'warn', `Proxy ${proxy.label} không nhận được quest ${questId}, thử trực tiếp.`);
-			res = await enrollQuest(state.token, questId, false, tokenId, quest?.raw);
-			body = await res.text().catch(() => '');
+			addLog(
+				tokenId,
+				'warn',
+				`Proxy ${proxy.label} không nhận được quest ${questId}; giữ nguyên IP, không thử trực tiếp.`,
+			);
 		}
 
 		if (res.ok || res.status === 204) {

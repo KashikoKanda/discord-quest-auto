@@ -450,15 +450,17 @@ export async function fetchDiscordQuests(token: string, tokenId?: string): Promi
 	};
 }
 
-export async function getDiscordProfile(token: string, tokenId?: string) {
-	const userRes = await discordFetch(token, '/users/@me', {}, tokenId);
+export async function getDiscordProfile(token: string, tokenId?: string, proxyUrl?: string) {
+	// discordFetch nhận thêm proxyUrl ngoài RequestInit; ép kiểu để TS chấp nhận.
+	const opts = (proxyUrl ? { proxyUrl } : {}) as RequestInit;
+	const userRes = await discordFetch(token, '/users/@me', opts, tokenId);
 	if (!userRes.ok) throw new Error('Failed to fetch profile');
 	const user = (await userRes.json()) as Record<string, any>;
 
 	// Fetch profile for banner data + settings for nsfw_allowed (age check)
 	const [profileRes, settingsRes] = await Promise.all([
-		discordFetch(token, `/users/${user.id}/profile`, {}, tokenId),
-		discordFetch(token, '/users/@me/settings', {}, tokenId),
+		discordFetch(token, `/users/${user.id}/profile`, opts, tokenId),
+		discordFetch(token, '/users/@me/settings', opts, tokenId),
 	]);
 	const profileMeta = profileRes.ok ? await profileRes.json().catch(() => ({})) : {};
 	const settingsData = settingsRes.ok ? await settingsRes.json().catch(() => ({})) : {};

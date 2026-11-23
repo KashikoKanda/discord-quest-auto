@@ -27,9 +27,9 @@ function hash(text: string): number {
 }
 
 function enabled(): boolean {
-	// Chỉ bật khi có proxy và người dùng không tắt rõ ràng.
-	if (process.env.PROXY_PER_ACCOUNT === '0') return false;
-	return true;
+	// Mặc định TẮT: proxy chỉ dùng cho đúng request cần đổi IP (nhận quest ẩn, đăng nhập),
+	// không gánh toàn bộ traffic quest vì rất tốn GB. Bật lại bằng PROXY_PER_ACCOUNT=1.
+	return process.env.PROXY_PER_ACCOUNT === '1';
 }
 
 /**

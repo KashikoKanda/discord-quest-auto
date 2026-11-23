@@ -333,6 +333,23 @@ PROXY_LIST_URL=https://raw.githubusercontent.com/<you>/<repo>/main/proxies.txt
 `PROXY_LIST` carries the same lines inline, newline separated, for hosts with no
 disk to keep a file on.
 
+## Where the proxy is allowed to be used
+
+Proxy bandwidth is the expensive part, so it is not on by default:
+
+- **Hidden-quest enroll** picks a proxy tagged with the quest's country for that one
+  request, then the account goes back to its normal exit. If that proxy fails, the
+  enroll fails; it is not retried directly, because the same token on two IPs a
+  second apart is what gets tokens revoked.
+- **`/link`** may verify through a proxy so a hundred people linking on the same day
+  do not all appear from one address. It costs a few kilobytes per link.
+- **Everything else** (quests, progress ticks, claim) runs from the bot's own stable
+  address. One address for one token is safe; it is hopping between addresses that
+  is not.
+
+Set `PROXY_PER_ACCOUNT=1` to pin every account to its own proxy again, at the cost of
+sending all quest traffic through paid bandwidth.
+
 ## Keeping tokens alive
 
 Discord invalidates a user token when it stops believing the session is really that
