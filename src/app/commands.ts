@@ -202,9 +202,11 @@ async function handleLinkModal(interaction: GatewayInteraction): Promise<void> {
 		// fingerprint lúc chạy quest (trước đây mỗi bên một bộ, Discord thấy hai client).
 		const tokenId = tokenIdFor(token);
 		const { pickProxy } = await import('../core/proxies');
-		// Login được phép đi proxy để nhiều tài khoản không dồn một IP; proxy chỉ dùng
-		// cho vài request xác thực nên tốn rất ít dung lượng.
-		const proxy = await pickProxy(null).catch(() => null);
+		const { getLoginProxy } = await import('../core/proxyFactory');
+		// Mỗi tài khoản một proxy riêng, giữ lại cho các lần xác thực sau nên không
+		// nhảy IP; chỉ vài request nên tốn rất ít dung lượng.
+		const factory = await getLoginProxy(tokenId).catch(() => null);
+		const proxy = factory ? { url: factory.url } : await pickProxy(null).catch(() => null);
 		const profile = await getDiscordProfile(token, tokenId, proxy?.url);
 		const username = profile.user?.username ?? 'không rõ';
 		const account = linkAccount(discordUserId, token, username, profile.user?.id ?? '');

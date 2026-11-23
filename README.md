@@ -333,6 +333,29 @@ PROXY_LIST_URL=https://raw.githubusercontent.com/<you>/<repo>/main/proxies.txt
 `PROXY_LIST` carries the same lines inline, newline separated, for hosts with no
 disk to keep a file on.
 
+## ResiFactory proxies, one per account and country
+
+Hidden-quest enroll and `/link` do not use a static list. They ask ResiFactory for a
+sticky residential proxy in the country that matters and keep it:
+
+- the cache key is `(uid, country)`, so the same account asking for the same country
+  reuses its proxy instead of burning a new one, and two accounts never share a proxy
+  even in the same country;
+- `/link` uses `RF_LOGIN_COUNTRY` (default `vn`) so verification does not come from
+  the bot's own address while a hundred people link;
+- if ResiFactory returns nothing (empty wallet, wrong country code, 4xx), the static
+  `PROXY_LIST` entry for that country is used as a fallback.
+
+```bash
+RF_API_TOKEN=rf_live_...      # ResiFactory API key
+RF_POOL=walmart_premium       # pool with sticky sessions
+RF_SESSION_MINUTES=1440       # 24h sticky
+RF_LOGIN_COUNTRY=vn
+```
+
+Country codes are normalised to ISO 3166-1 alpha-2 before the call (`UK` becomes
+`GB`, `EU` becomes `DE`), because the API rejects anything else with a 422.
+
 ## Where the proxy is allowed to be used
 
 Proxy bandwidth is the expensive part, so it is not on by default:

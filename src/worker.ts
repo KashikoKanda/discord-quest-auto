@@ -452,6 +452,7 @@ export const QuestWorker = {
 		const { enrollQuest } = await import('./api/client');
 		const { fetchCatalog, fetchRegions } = await import('./api/catalog');
 		const { pickProxy } = await import('./core/proxies');
+		const { getOrCreateProxy } = await import('./core/proxyFactory');
 		const catalog = await fetchCatalog().catch(() => []);
 		const quest = catalog.find((item) => item.id === questId);
 
@@ -459,7 +460,12 @@ export const QuestWorker = {
 		const regions = await fetchRegions().catch(() => new Map());
 		const region = regions.get(questId);
 		const country = region && region.include.length > 0 ? region.include[0] : null;
-		const proxy = await pickProxy(country).catch(() => null);
+		// Proxy dân dụng riêng cho đúng cặp (tài khoản, nước): cùng nước thì dùng lại,
+		// uid khác thì proxy khác. Danh sách tĩnh chỉ là dự phòng khi tạo lỗi.
+		const factory = await getOrCreateProxy(tokenId, country).catch(() => null);
+		const proxy = factory
+			? { url: factory.url, label: `ResiFactory ${factory.country.toUpperCase()}` }
+			: await pickProxy(country).catch(() => null);
 
 		const res = await enrollQuest(state.token, questId, false, tokenId, quest?.raw, proxy?.url);
 		const body = await res.text().catch(() => '');
