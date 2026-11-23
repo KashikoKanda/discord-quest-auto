@@ -1,10 +1,9 @@
 /**
  * Proxy dân dụng tạo theo yêu cầu từ ResiFactory.
  *
- * Vì sao không dùng danh sách tĩnh: quest ẩn khoá vùng cần đúng IP của nước đó, và
- * mỗi tài khoản phải có IP riêng để không bị ghép với người khác. Ở đây mỗi cặp
- * (uid, nước) được tạo một proxy sticky và giữ lại dùng tiếp; uid khác thì proxy
- * khác, cùng nước cũng không dùng chung.
+ * Proxy ở đây là dùng MỘT LẦN: mở đúng nước của quest, gọi đúng request enroll,
+ * rồi đóng luôn. Không giữ lại, không ghim vào token, nên không tốn dung lượng
+ * cho những request không cần đổi IP và mỗi tài khoản vẫn có IP riêng của nó.
  *
  * API: https://resifactory.net/docs/api — POST /proxies trả danh sách dạng
  * host:port:user:pass, đổi thành URL http://user:pass@host:port cho ProxyAgent.
@@ -100,13 +99,10 @@ async function call(path: string, body?: Record<string, unknown>): Promise<{ sta
 	return { status: 0, text: lastError };
 }
 
-/** Proxy của đúng cặp (uid, nước); gọi lại thì dùng lại cái đã tạo. */
-export async function getOrCreateProxy(uid: string, countryCode: string | null): Promise<FactoryProxy | null> {
+/** Mở một proxy mới cho đúng nước của quest. Dùng xong phải gọi closeProxy. */
+export async function openProxy(uid: string, countryCode: string | null): Promise<FactoryProxy | null> {
 	const country = normalizeCountry(countryCode);
 	if (!country || !apiKey()) return null;
-
-	const existing = cache.get(key(uid, country));
-	if (existing) return existing;
 
 	const res = await call('/proxies', {
 		pool: pool(),
@@ -140,10 +136,9 @@ export async function getOrCreateProxy(uid: string, countryCode: string | null):
 	return null;
 }
 
-/** Proxy dùng một lần cho /link: vẫn giữ riêng theo uid, nhưng không gắn với quest. */
-export async function getLoginProxy(uid: string): Promise<FactoryProxy | null> {
-	const country = normalizeCountry(process.env.RF_LOGIN_COUNTRY ?? 'vn') ?? 'vn';
-	return getOrCreateProxy(uid, country);
+/** Đóng proxy sau khi request enroll xong: không duy trì, không tái sử dụng. */
+export function closeProxy(uid: string, countryCode: string | null): void {
+	releaseFactoryProxy(uid, countryCode);
 }
 
 export function releaseFactoryProxy(uid: string, countryCode: string | null): void {

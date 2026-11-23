@@ -201,13 +201,9 @@ async function handleLinkModal(interaction: GatewayInteraction): Promise<void> {
 		// Xác thực bằng đúng tokenId sẽ dùng về sau, để fingerprint lúc /link trùng với
 		// fingerprint lúc chạy quest (trước đây mỗi bên một bộ, Discord thấy hai client).
 		const tokenId = tokenIdFor(token);
-		const { pickProxy } = await import('../core/proxies');
-		const { getLoginProxy } = await import('../core/proxyFactory');
-		// Mỗi tài khoản một proxy riêng, giữ lại cho các lần xác thực sau nên không
-		// nhảy IP; chỉ vài request nên tốn rất ít dung lượng.
-		const factory = await getLoginProxy(tokenId).catch(() => null);
-		const proxy = factory ? { url: factory.url } : await pickProxy(null).catch(() => null);
-		const profile = await getDiscordProfile(token, tokenId, proxy?.url);
+		// Proxy dành riêng cho request enroll quest ẩn; /link xác thực trực tiếp từ IP
+		// của bot, đúng một IP cho một token nên không sinh thêm chi phí.
+		const profile = await getDiscordProfile(token, tokenId);
 		const username = profile.user?.username ?? 'không rõ';
 		const account = linkAccount(discordUserId, token, username, profile.user?.id ?? '');
 		QuestWorker.registerToken(account.tokenId, token, false);
