@@ -499,34 +499,6 @@ compactly, pruned at startup for accounts that are gone, and quest state is flus
 every 200 ms through a temp file and rename, so concurrent workers cannot truncate
 each other's progress.
 
-## Solving the login captcha
-
-
-challenge. `/login` handles it two ways:
-
-- With a solver key the bot clears the challenge itself and retries on the same IP:
-  set `CAPSOLVER_API_KEY` or `TWOCAPTCHA_API_KEY`.
-- Without a key, and when the bot runs as a web service (`RENDER_EXTERNAL_URL` is
-  set), the reply becomes a "Giải captcha" button. It opens a small page served by
-  the bot itself; ticking the box there sends the token back and the login
-  continues. The link lives five minutes.
-
-On a plain CLI run there is no public page, so the challenge cannot be handed to a
-person; the login then fails with a message saying so.
-
-Each line is one proxy, optionally tagged with a country:
-
-```
-host:port
-host:port:user:pass#DE
-user:pass@host:port#JP
-socks5://user:pass@host:port#TH
-```
-
-Editing that file on GitHub is enough: the list is reloaded every ten minutes
-(`PROXY_REFRESH_MIN`), cached on disk between restarts, and a quest without a
-matching proxy falls back to a direct request so nothing is lost.
-
 ## Development
 
 ```bash
